@@ -1,0 +1,17 @@
+# Entorno virtual
+venv/
+
+# Archivos compilados de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Variables de entorno
+.env
+
+# Archivos de Docker
+*.log
+
+# Evidencias locales (se suben manualmente si se necesitan)
+evidencias/
