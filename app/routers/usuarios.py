@@ -16,7 +16,8 @@ from app.models import UsuarioCreate, UsuarioResponse
 from app.database import get_connection, release_connection
 from app.cache import (
     adquirir_lock, liberar_lock,
-    cachear_usuario, obtener_usuario_cache
+    cachear_usuario, obtener_usuario_cache,
+    get_redis
 )
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
@@ -73,7 +74,6 @@ async def registrar_usuario(datos: UsuarioCreate):
         #   usuario:{id}     → nombre  (para validar si un ID existe)
         #   nombre:{nombre}  → id      (para verificar nombres sin tocar MariaDB)
         await cachear_usuario(nuevo_id, datos.nombre)
-        from app.cache import get_redis
         redis = get_redis()
         await redis.setex(
             f"nombre:{datos.nombre.lower()}", 300, nuevo_id
