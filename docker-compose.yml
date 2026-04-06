@@ -1,0 +1,80 @@
+services:
+
+  # ── Base de datos relacional ──────────────────────────────────────────
+  db:
+    image: mariadb:11
+    container_name: chat_db
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - chat_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Sincronización distribuida y caché ───────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: chat_redis
+    restart: unless-stopped
+    networks:
+      - chat_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Nodo de inteligencia artificial local ────────────────────────────
+  ollama:
+    image: ollama/ollama
+    container_name: chat_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - chat_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── API principal ─────────────────────────────────────────────────────
+  api:
+    build: .
+    container_name: chat_api
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    networks:
+      - chat_network
+    volumes:
+      - ./frontend:/app/frontend
+
+# ── Volúmenes persistentes ────────────────────────────────────────────
+volumes:
+  db_data:
+  ollama_data:
+
+# ── Red interna entre contenedores ───────────────────────────────────
+networks:
+  chat_network:
+    driver: bridge

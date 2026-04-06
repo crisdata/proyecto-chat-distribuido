@@ -1,15 +1,62 @@
 # routers/mensajes.py
 # Maneja el envío y consulta de mensajes privados entre usuarios.
 # Endpoints disponibles:
-#   POST /mensaje_privado
-#   GET  /conversacion/{usuario_id}
+#   POST /mensaje_privado               — enviar mensaje privado
+#   GET  /conversacion/{usuario_id}     — consultar historial recibido
+#   GET  /no_leidos/{usuario_id}        — consultar mensajes no leídos
+#
+# Flujo de envío:
+#   1. Valida emisor y receptor consultando Redis primero, MariaDB como fallback
+#   2. Guarda el mensaje en MariaDB
+#   3. Incrementa contador de mensajes no leídos del receptor en Redis
+#
+# Flujo de consulta:
+#   1. Valida que el usuario existe
+#   2. Retorna historial cronológico desde MariaDB
+#   3. Resetea contador de mensajes no leídos en Redis
 
-from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
-from app.models import MensajeCreate, MensajeResponse
-from app.storage import usuarios, conversaciones
+from app.models import (
+    MensajeCreate, MensajeResponse,
+    NoLeidosResponse
+)
+from app.database import get_connection, release_connection
+from app.cache import (
+    obtener_usuario_cache, cachear_usuario,
+    incrementar_mensajes_no_leidos,
+    resetear_mensajes_no_leidos,
+    obtener_mensajes_no_leidos
+)
 
 router = APIRouter(tags=["Mensajes"])
+
+
+async def validar_usuario(usuario_id: str, conn) -> str | None:
+    """
+    Verifica que un usuario existe consultando Redis primero.
+    Si no está en caché, consulta MariaDB y lo cachea para
+    próximas validaciones.
+    Retorna el nombre del usuario si existe, None si no existe.
+    """
+    # Primera línea de defensa: caché Redis
+    nombre = await obtener_usuario_cache(usuario_id)
+    if nombre:
+        return nombre
+
+    # Fallback: consultar MariaDB
+    async with conn.cursor() as cursor:
+        await cursor.execute(
+            "SELECT id, nombre FROM usuarios WHERE id = %s",
+            (usuario_id,)
+        )
+        usuario = await cursor.fetchone()
+
+    if not usuario:
+        return None
+
+    # Cachear para próximas validaciones y retornar nombre
+    await cachear_usuario(usuario[0], usuario[1])
+    return usuario[1]
 
 
 @router.post("/mensaje_privado", response_model=MensajeResponse, status_code=201)
@@ -17,53 +64,129 @@ async def enviar_mensaje(datos: MensajeCreate):
     """
     Envía un mensaje privado de un usuario a otro.
     Ambos usuarios deben estar registrados en el sistema.
+    El mensaje se persiste en MariaDB y el contador de no leídos
+    del receptor se incrementa en Redis.
     """
+    conn = await get_connection()
+    try:
+        # Validar emisor
+        nombre_emisor = await validar_usuario(datos.emisor_id, conn)
+        if not nombre_emisor:
+            raise HTTPException(
+                status_code=404,
+                detail="El emisor no existe. Verifica el emisor_id."
+            )
 
-    # Verificar que el emisor existe.
-    if datos.emisor_id not in usuarios:
-        raise HTTPException(
-            status_code=404,
-            detail="El emisor no existe. Verifica el emisor_id."
-        )
+        # Validar receptor
+        nombre_receptor = await validar_usuario(datos.receptor_id, conn)
+        if not nombre_receptor:
+            raise HTTPException(
+                status_code=404,
+                detail="El receptor no existe. Verifica el receptor_id."
+            )
 
-    # Verificar que el receptor existe.
-    if datos.receptor_id not in usuarios:
-        raise HTTPException(
-            status_code=404,
-            detail="El receptor no existe. Verifica el receptor_id."
-        )
+        # Guardar mensaje en MariaDB
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """INSERT INTO mensajes (emisor_id, receptor_id, contenido)
+                   VALUES (%s, %s, %s)""",
+                (datos.emisor_id, datos.receptor_id, datos.contenido)
+            )
+            mensaje_id = cursor.lastrowid
 
-    # Construir el objeto del mensaje con marca de tiempo.
-    mensaje = {
-        "emisor_id": datos.emisor_id,
-        "receptor_id": datos.receptor_id,
-        "contenido": datos.contenido,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
+            # Obtener el mensaje recién insertado con su timestamp
+            await cursor.execute(
+                """SELECT id, emisor_id, receptor_id, contenido, timestamp
+                   FROM mensajes WHERE id = %s""",
+                (mensaje_id,)
+            )
+            mensaje = await cursor.fetchone()
 
-    # Si el receptor no tiene conversación aún, se crea su lista.
-    if datos.receptor_id not in conversaciones:
-        conversaciones[datos.receptor_id] = []
+        # Incrementar contador de mensajes no leídos del receptor
+        await incrementar_mensajes_no_leidos(datos.receptor_id)
 
-    # Guardar el mensaje en el historial del receptor.
-    conversaciones[datos.receptor_id].append(mensaje)
+        return {
+            "id": mensaje[0],
+            "emisor_id": mensaje[1],
+            "receptor_id": mensaje[2],
+            "contenido": mensaje[3],
+            "timestamp": mensaje[4].isoformat()
+        }
 
-    return mensaje
+    finally:
+        await release_connection(conn)
 
 
-@router.get("/conversacion/{usuario_id}", response_model=list[MensajeResponse])
+@router.get(
+    "/conversacion/{usuario_id}",
+    response_model=list[MensajeResponse]
+)
 async def consultar_conversacion(usuario_id: str):
     """
-    Devuelve el historial de mensajes recibidos por un usuario.
-    Los mensajes están ordenados cronológicamente.
+    Retorna el historial de mensajes recibidos por un usuario,
+    ordenados cronológicamente.
+    Resetea el contador de mensajes no leídos al consultar.
     """
+    conn = await get_connection()
+    try:
+        # Validar que el usuario existe
+        nombre = await validar_usuario(usuario_id, conn)
+        if not nombre:
+            raise HTTPException(
+                status_code=404,
+                detail="El usuario no existe. Verifica el usuario_id."
+            )
 
-    # Verificar que el usuario existe.
-    if usuario_id not in usuarios:
-        raise HTTPException(
-            status_code=404,
-            detail="El usuario no existe. Verifica el usuario_id."
-        )
+        # Obtener historial desde MariaDB
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """SELECT id, emisor_id, receptor_id, contenido, timestamp
+                   FROM mensajes
+                   WHERE receptor_id = %s
+                   ORDER BY timestamp ASC""",
+                (usuario_id,)
+            )
+            mensajes = await cursor.fetchall()
 
-    # Si el usuario existe pero no tiene mensajes, devolver lista vacía.
-    return conversaciones.get(usuario_id, [])
+        # Resetear contador de no leídos al consultar
+        await resetear_mensajes_no_leidos(usuario_id)
+
+        return [
+            {
+                "id": m[0],
+                "emisor_id": m[1],
+                "receptor_id": m[2],
+                "contenido": m[3],
+                "timestamp": m[4].isoformat()
+            }
+            for m in mensajes
+        ]
+
+    finally:
+        await release_connection(conn)
+
+
+@router.get(
+    "/no_leidos/{usuario_id}",
+    response_model=NoLeidosResponse
+)
+async def mensajes_no_leidos(usuario_id: str):
+    """
+    Retorna el número de mensajes no leídos de un usuario.
+    El frontend usa este endpoint para mostrar el indicador
+    de notificación en la lista de contactos.
+    """
+    conn = await get_connection()
+    try:
+        nombre = await validar_usuario(usuario_id, conn)
+        if not nombre:
+            raise HTTPException(
+                status_code=404,
+                detail="El usuario no existe. Verifica el usuario_id."
+            )
+
+        cantidad = await obtener_mensajes_no_leidos(usuario_id)
+        return {"usuario_id": usuario_id, "no_leidos": cantidad}
+
+    finally:
+        await release_connection(conn)
