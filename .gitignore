@@ -1,4 +1,4 @@
-# Entorno virtual
+# Entorno virtual Python
 venv/
 
 # Archivos compilados de Python
@@ -13,5 +13,10 @@ __pycache__/
 # Archivos de Docker
 *.log
 
-# Evidencias locales (se suben manualmente si se necesitan)
+# Evidencias locales
 evidencias/
+
+# Frontend — dependencias y build
+frontend/node_modules/
+frontend/dist/
+frontend/.env

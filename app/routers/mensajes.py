@@ -190,3 +190,57 @@ async def mensajes_no_leidos(usuario_id: str):
 
     finally:
         await release_connection(conn)
+
+@router.get(
+    "/conversacion/{usuario_id}/{contacto_id}",
+    response_model=list[MensajeResponse]
+)
+async def consultar_conversacion_bilateral(usuario_id: str, contacto_id: str):
+    """
+    Retorna el historial completo de mensajes entre dos usuarios,
+    en ambas direcciones, ordenados cronológicamente.
+    Este endpoint es usado por el frontend para mostrar la conversación
+    completa sin necesidad de dos consultas separadas.
+    """
+    conn = await get_connection()
+    try:
+        # Verificar que ambos usuarios existen
+        nombre_usuario = await validar_usuario(usuario_id, conn)
+        if not nombre_usuario:
+            raise HTTPException(
+                status_code=404,
+                detail="El usuario no existe. Verifica el usuario_id."
+            )
+
+        nombre_contacto = await validar_usuario(contacto_id, conn)
+        if not nombre_contacto:
+            raise HTTPException(
+                status_code=404,
+                detail="El contacto no existe. Verifica el contacto_id."
+            )
+
+        # Obtener mensajes en ambas direcciones ordenados por timestamp
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                """SELECT id, emisor_id, receptor_id, contenido, timestamp
+                   FROM mensajes
+                   WHERE (emisor_id = %s AND receptor_id = %s)
+                      OR (emisor_id = %s AND receptor_id = %s)
+                   ORDER BY timestamp ASC""",
+                (usuario_id, contacto_id, contacto_id, usuario_id)
+            )
+            mensajes = await cursor.fetchall()
+
+        return [
+            {
+                "id": m[0],
+                "emisor_id": m[1],
+                "receptor_id": m[2],
+                "contenido": m[3],
+                "timestamp": m[4].isoformat()
+            }
+            for m in mensajes
+        ]
+
+    finally:
+        await release_connection(conn)

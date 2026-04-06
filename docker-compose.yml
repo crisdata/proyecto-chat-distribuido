@@ -51,12 +51,12 @@ services:
 
   # ── API principal ─────────────────────────────────────────────────────
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: chat_api
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -66,8 +66,20 @@ services:
         condition: service_started
     networks:
       - chat_network
-    volumes:
-      - ./frontend:/app/frontend
+
+  # ── Frontend React + Nginx ────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: chat_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    networks:
+      - chat_network
 
 # ── Volúmenes persistentes ────────────────────────────────────────────
 volumes:
