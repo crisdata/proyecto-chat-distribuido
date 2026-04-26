@@ -4,16 +4,13 @@
 #   POST /mensaje_privado               — enviar mensaje privado
 #   GET  /conversacion/{usuario_id}     — consultar historial recibido
 #   GET  /no_leidos/{usuario_id}        — consultar mensajes no leídos
+#   GET  /conversacion/{id}/{contacto}  — conversación bilateral completa
 #
 # Flujo de envío:
 #   1. Valida emisor y receptor consultando Redis primero, MariaDB como fallback
 #   2. Guarda el mensaje en MariaDB
 #   3. Incrementa contador de mensajes no leídos del receptor en Redis
-#
-# Flujo de consulta:
-#   1. Valida que el usuario existe
-#   2. Retorna historial cronológico desde MariaDB
-#   3. Resetea contador de mensajes no leídos en Redis
+#   4. Notifica al receptor via WebSocket si está conectado
 
 from fastapi import APIRouter, HTTPException
 from app.models import (
@@ -27,6 +24,7 @@ from app.cache import (
     resetear_mensajes_no_leidos,
     obtener_mensajes_no_leidos
 )
+from app.routers.websocket import manager
 
 router = APIRouter(tags=["Mensajes"])
 
@@ -38,12 +36,10 @@ async def validar_usuario(usuario_id: str, conn) -> str | None:
     próximas validaciones.
     Retorna el nombre del usuario si existe, None si no existe.
     """
-    # Primera línea de defensa: caché Redis
     nombre = await obtener_usuario_cache(usuario_id)
     if nombre:
         return nombre
 
-    # Fallback: consultar MariaDB
     async with conn.cursor() as cursor:
         await cursor.execute(
             "SELECT id, nombre FROM usuarios WHERE id = %s",
@@ -54,7 +50,6 @@ async def validar_usuario(usuario_id: str, conn) -> str | None:
     if not usuario:
         return None
 
-    # Cachear para próximas validaciones y retornar nombre
     await cachear_usuario(usuario[0], usuario[1])
     return usuario[1]
 
@@ -64,8 +59,9 @@ async def enviar_mensaje(datos: MensajeCreate):
     """
     Envía un mensaje privado de un usuario a otro.
     Ambos usuarios deben estar registrados en el sistema.
-    El mensaje se persiste en MariaDB y el contador de no leídos
-    del receptor se incrementa en Redis.
+    El mensaje se persiste en MariaDB, el contador de no leídos
+    del receptor se incrementa en Redis, y se notifica al receptor
+    via WebSocket si está conectado en tiempo real.
     """
     conn = await get_connection()
     try:
@@ -94,7 +90,6 @@ async def enviar_mensaje(datos: MensajeCreate):
             )
             mensaje_id = cursor.lastrowid
 
-            # Obtener el mensaje recién insertado con su timestamp
             await cursor.execute(
                 """SELECT id, emisor_id, receptor_id, contenido, timestamp
                    FROM mensajes WHERE id = %s""",
@@ -102,8 +97,18 @@ async def enviar_mensaje(datos: MensajeCreate):
             )
             mensaje = await cursor.fetchone()
 
-        # Incrementar contador de mensajes no leídos del receptor
+        # Incrementar contador de no leídos del receptor en Redis
         await incrementar_mensajes_no_leidos(datos.receptor_id)
+
+        # Notificar al receptor via WebSocket si está conectado.
+        # Si no está conectado, simplemente no hace nada.
+        # El frontend del receptor verá el mensaje en el próximo
+        # ciclo de polling como respaldo.
+        await manager.notify(datos.receptor_id, {
+            "tipo": "nuevo_mensaje",
+            "emisor_id": datos.emisor_id,
+            "emisor_nombre": nombre_emisor
+        })
 
         return {
             "id": mensaje[0],
@@ -129,7 +134,6 @@ async def consultar_conversacion(usuario_id: str):
     """
     conn = await get_connection()
     try:
-        # Validar que el usuario existe
         nombre = await validar_usuario(usuario_id, conn)
         if not nombre:
             raise HTTPException(
@@ -137,7 +141,6 @@ async def consultar_conversacion(usuario_id: str):
                 detail="El usuario no existe. Verifica el usuario_id."
             )
 
-        # Obtener historial desde MariaDB
         async with conn.cursor() as cursor:
             await cursor.execute(
                 """SELECT id, emisor_id, receptor_id, contenido, timestamp
@@ -148,7 +151,6 @@ async def consultar_conversacion(usuario_id: str):
             )
             mensajes = await cursor.fetchall()
 
-        # Resetear contador de no leídos al consultar
         await resetear_mensajes_no_leidos(usuario_id)
 
         return [
@@ -191,6 +193,7 @@ async def mensajes_no_leidos(usuario_id: str):
     finally:
         await release_connection(conn)
 
+
 @router.get(
     "/conversacion/{usuario_id}/{contacto_id}",
     response_model=list[MensajeResponse]
@@ -204,7 +207,6 @@ async def consultar_conversacion_bilateral(usuario_id: str, contacto_id: str):
     """
     conn = await get_connection()
     try:
-        # Verificar que ambos usuarios existen
         nombre_usuario = await validar_usuario(usuario_id, conn)
         if not nombre_usuario:
             raise HTTPException(
@@ -219,7 +221,6 @@ async def consultar_conversacion_bilateral(usuario_id: str, contacto_id: str):
                 detail="El contacto no existe. Verifica el contacto_id."
             )
 
-        # Obtener mensajes en ambas direcciones ordenados por timestamp
         async with conn.cursor() as cursor:
             await cursor.execute(
                 """SELECT id, emisor_id, receptor_id, contenido, timestamp

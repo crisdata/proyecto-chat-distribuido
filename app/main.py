@@ -6,7 +6,7 @@
 import os
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from app.routers import usuarios, mensajes, ia
+from app.routers import usuarios, mensajes, ia, websocket
 from app.routers.ia import registrar_nodo_ia
 from app.database import conectar, desconectar, crear_tablas
 from app.cache import conectar_redis, desconectar_redis
@@ -40,7 +40,7 @@ app = FastAPI(
         "Sistema de chat distribuido con comunicación privada entre usuarios "
         "y nodo de inteligencia artificial local (Ollama llama3.2:3b). "
     ),
-    version="2.0.0",
+    version="3.0.0",
     lifespan=lifespan
 )
 
@@ -48,6 +48,7 @@ app = FastAPI(
 app.include_router(usuarios.router)
 app.include_router(mensajes.router)
 app.include_router(ia.router)
+app.include_router(websocket.router)
 
 
 @app.get("/", tags=["Estado"])
@@ -55,11 +56,12 @@ async def estado():
     """Verifica que el servidor está en línea."""
     return {
         "sistema": "Chat Privado Usuario-Usuario",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "estado": "en línea",
         "infraestructura": {
             "base_de_datos": "MariaDB",
             "cache": "Redis",
-            "ia": f"Ollama {os.getenv('OLLAMA_MODEL', 'llama3.2:3b')}"
+            "ia": f"Ollama {os.getenv('OLLAMA_MODEL', 'llama3.2:3b')}",
+            "tiempo_real": "WebSocket"
         }
     }

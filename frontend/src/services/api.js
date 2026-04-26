@@ -5,6 +5,9 @@
 // y en producción Nginx hace el mismo trabajo sin cambiar una sola línea.
 
 const BASE_URL = '/api';
+const WS_URL = window.location.protocol === 'https:'
+  ? `wss://${window.location.host}/ws`
+  : `ws://${window.location.host}/ws`;
 
 // ── Usuarios ──────────────────────────────────────────────────────────────
 
@@ -65,8 +68,6 @@ export async function obtenerNoLeidos(usuario_id) {
 // ── Inteligencia Artificial ───────────────────────────────────────────────
 
 export async function enviarMensajeIA(emisor_id, ia_id, contenido) {
-  // ia_id se obtiene previamente con obtenerIdIA()
-  // para usar el UUID real del nodo IA registrado en el sistema
   const res = await fetch(`${BASE_URL}/ia/mensaje`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -88,19 +89,88 @@ export async function estadoIA() {
   }
 }
 
+// ── WebSocket ─────────────────────────────────────────────────────────────
+
+/**
+ * Crea y gestiona una conexión WebSocket con reconexión automática.
+ *
+ * onMensaje   — callback que se ejecuta al recibir una notificación
+ * onEstado    — callback que recibe 'conectado' | 'reconectando' | 'desconectado'
+ *
+ * Retorna una función para cerrar la conexión manualmente,
+ * usada en el cleanup del useEffect de Chat.jsx.
+ *
+ * Backoff exponencial:
+ *   intento 1 → 1s, intento 2 → 2s, intento 3 → 4s ... máximo 30s
+ */
+export function crearWebSocket(usuarioId, onMensaje, onEstado) {
+  let intentos = 0
+  let timeoutId = null
+  let ws = null
+  let cerradoManualmente = false
+
+  function conectar() {
+    if (cerradoManualmente) return
+
+    ws = new WebSocket(`${WS_URL}/${usuarioId}`)
+
+    ws.onopen = () => {
+      intentos = 0
+      onEstado('conectado')
+    }
+
+    ws.onmessage = (evento) => {
+      try {
+        const datos = JSON.parse(evento.data)
+        onMensaje(datos)
+      } catch {
+        // mensaje malformado — ignorar
+      }
+    }
+
+    ws.onclose = () => {
+      if (cerradoManualmente) return
+      // Calcular tiempo de espera con backoff exponencial
+      // mínimo 1s, máximo 30s
+      const espera = Math.min(1000 * Math.pow(2, intentos), 30000)
+      intentos++
+      onEstado('reconectando')
+      timeoutId = setTimeout(conectar, espera)
+    }
+
+    ws.onerror = () => {
+      // Forzar onclose para disparar la reconexión
+      ws.close()
+    }
+  }
+
+  conectar()
+
+  // Retorna función de cierre manual para el cleanup de useEffect
+  return function cerrar() {
+    cerradoManualmente = true
+    clearTimeout(timeoutId)
+    if (ws) ws.close()
+  }
+}
+
 // ── Utilidades ────────────────────────────────────────────────────────────
 
 export function formatearHora(timestamp) {
-  const fecha = new Date(timestamp);
+  // Agrega 'Z' si no tiene zona horaria para que JavaScript
+  // lo interprete como UTC y lo convierta correctamente a hora local
+  const ts = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z'
+  const fecha = new Date(ts)
   return fecha.toLocaleTimeString('es-CO', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: true
-  });
+  })
 }
 
 export function esHoy(timestamp) {
-  const hoy = new Date();
-  const fecha = new Date(timestamp);
-  return hoy.toDateString() === fecha.toDateString();
+  const ts = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z'
+  const hoy = new Date()
+  const fecha = new Date(ts)
+  return hoy.toDateString() === fecha.toDateString()
 }

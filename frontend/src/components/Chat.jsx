@@ -1,15 +1,17 @@
 // Chat.jsx
 // Panel derecho con la conversación activa entre dos usuarios.
-// Maneja el envío de mensajes tanto a usuarios humanos como al nodo IA.
-// Actualiza el historial automáticamente cada 3 segundos.
+// Usa WebSocket para recibir mensajes en tiempo real.
+// Incluye reconexión automática con backoff exponencial
+// e indicador visual del estado de conexión.
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Bot, User, Loader } from 'lucide-react'
+import { Send, Bot, User, Loader, Wifi, WifiOff } from 'lucide-react'
 import Mensaje from './Mensaje'
 import {
   enviarMensaje,
   enviarMensajeIA,
-  esHoy
+  esHoy,
+  crearWebSocket
 } from '../services/api'
 
 const BASE_URL = '/api'
@@ -19,11 +21,13 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [cargando, setCargando] = useState(true)
+  // Estado de la conexión WebSocket para el indicador visual
+  const [estadoWS, setEstadoWS] = useState('conectado')
   const finalRef = useRef(null)
   const esIA = contacto.id === iaId
 
-  // Función centralizada para cargar la conversación bilateral.
-  // Extrae la lógica compartida entre el intervalo y el envío.
+  // Carga la conversación bilateral desde el backend.
+  // Se llama al montar, al recibir notificación WS y al enviar.
   const cargarConversacion = useCallback(async () => {
     try {
       const res = await fetch(
@@ -37,17 +41,30 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
     }
   }, [usuarioActual.id, contacto.id])
 
-  // Cargar conversación al cambiar de contacto
+  // Cargar conversación al montar y conectar WebSocket
   useEffect(() => {
     setCargando(true)
     setMensajes([])
-
     cargarConversacion().finally(() => setCargando(false))
 
-    // Actualizar cada 3 segundos para mostrar mensajes nuevos
-    const intervalo = setInterval(cargarConversacion, 3000)
-    return () => clearInterval(intervalo)
-  }, [cargarConversacion])
+    // Crear conexión WebSocket con reconexión automática.
+    // onMensaje se ejecuta al recibir notificación del servidor.
+    // onEstado actualiza el indicador visual de conexión.
+    const cerrarWS = crearWebSocket(
+      usuarioActual.id,
+      (datos) => {
+        // Solo recargar si el mensaje viene del contacto activo
+        if (datos.tipo === 'nuevo_mensaje' &&
+            datos.emisor_id === contacto.id) {
+          cargarConversacion()
+        }
+      },
+      (estado) => setEstadoWS(estado)
+    )
+
+    // Cleanup: cerrar WebSocket al desmontar o cambiar de contacto
+    return () => cerrarWS()
+  }, [usuarioActual.id, contacto.id, cargarConversacion])
 
   // Auto-scroll al último mensaje cuando llegan mensajes nuevos
   useEffect(() => {
@@ -116,6 +133,29 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
     })
   }
 
+  // Configuración del indicador visual de estado WebSocket
+  const indicadorWS = {
+    conectado: {
+      icono: <Wifi size={14} />,
+      texto: 'En línea',
+      clase: 'text-emerald-500'
+    },
+    reconectando: {
+      icono: <Loader size={14} className="animate-spin" />,
+      texto: 'Reconectando...',
+      clase: 'text-amber-500'
+    },
+    desconectado: {
+      icono: <WifiOff size={14} />,
+      texto: 'Sin conexión',
+      clase: 'text-red-400'
+    }
+  }[estadoWS] || {
+    icono: <Wifi size={14} />,
+    texto: 'En línea',
+    clase: 'text-emerald-500'
+  }
+
   return (
     <div className="flex-1 flex flex-col bg-gray-50">
 
@@ -134,12 +174,17 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
           <h3 className="font-semibold text-gray-800 text-sm">
             {contacto.nombre}
           </h3>
-          <p className="text-xs text-emerald-500">
-            {esIA
-              ? `Modelo: ${import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2:3b'}`
-              : 'En línea'
-            }
-          </p>
+          {/* Indicador de estado: IA muestra modelo, usuarios muestran estado WS */}
+          {esIA ? (
+            <p className="text-xs text-emerald-500">
+              {`Modelo: ${import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2:3b'}`}
+            </p>
+          ) : (
+            <div className={`flex items-center gap-1 text-xs ${indicadorWS.clase}`}>
+              {indicadorWS.icono}
+              <span>{indicadorWS.texto}</span>
+            </div>
+          )}
         </div>
         <div className="text-gray-400">
           {esIA ? <Bot size={18} /> : <User size={18} />}

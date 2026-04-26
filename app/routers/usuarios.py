@@ -57,8 +57,6 @@ async def registrar_usuario(datos: UsuarioCreate):
                     (datos.nombre,)
                 )
                 usuario = await cursor.fetchone()
-                await liberar_lock(f"registro:{datos.nombre.lower()}", token_lock)
-                await release_connection(conn)
                 return {
                     "id": usuario[0],
                     "nombre": usuario[1],
