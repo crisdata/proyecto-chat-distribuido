@@ -1,0 +1,19 @@
+# Dockerfile.worker
+# Imagen del worker que consume la cola RabbitMQ.
+# Proceso independiente de la API con su propio ciclo de vida.
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Copiar dependencias primero para aprovechar caché de Docker
+COPY requirements.txt .
+
+# Instalar dependencias incluyendo aiohttp para llamadas HTTP internas
+RUN pip install --no-cache-dir -r requirements.txt aiohttp==3.9.5
+
+# Copiar el código fuente
+COPY . .
+
+# Ejecutar el worker directamente
+CMD ["python", "-u", "-m", "app.worker"]

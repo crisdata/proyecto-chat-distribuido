@@ -33,14 +33,14 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     networks:
       - public_network
       - app_network
       - data_network
 
   # ── Base de datos relacional ──────────────────────────────────────────
-  # Solo accesible desde la capa de datos.
-  # internal: true en data_network impide cualquier acceso externo.
   db:
     image: mariadb:11
     container_name: chat_db
@@ -62,8 +62,6 @@ services:
       retries: 5
 
   # ── Caché y coordinación distribuida ─────────────────────────────────
-  # Solo accesible desde la capa de datos.
-  # Gestiona locks, caché de usuarios y contadores de no leídos.
   redis:
     image: redis:7-alpine
     container_name: chat_redis
@@ -77,8 +75,6 @@ services:
       retries: 5
 
   # ── Nodo de inteligencia artificial local ────────────────────────────
-  # Solo accesible desde la capa de datos.
-  # Se registra como usuario del sistema al arrancar.
   ollama:
     image: ollama/ollama
     container_name: chat_ollama
@@ -94,20 +90,66 @@ services:
       retries: 5
       start_period: 30s
 
+  # ── Broker de mensajes ────────────────────────────────────────────────
+  # RabbitMQ desacopla la API del proceso de notificación.
+  # El panel de administración está disponible en http://localhost:15672
+  # Solo accesible desde app_network — aislado del exterior.
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: chat_rabbitmq
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "15672:15672"
+    networks:
+      - public_network
+      - app_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Worker de mensajería ──────────────────────────────────────────────
+  # Consume eventos de RabbitMQ y notifica a los receptores via WebSocket.
+  # Necesita app_network para hablar con RabbitMQ y la API,
+  # y data_network para actualizar Redis.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: chat_worker
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - app_network
+      - data_network
+
 # ── Volúmenes persistentes ────────────────────────────────────────────
 volumes:
   db_data:
   ollama_data:
+  rabbitmq_data:
 
 # ── Redes segmentadas por capa ────────────────────────────────────────
 networks:
 
   # Capa pública — frontend y API expuestos al navegador
-  # No es internal para permitir que Nginx sirva al exterior
   public_network:
     driver: bridge
 
-  # Capa de aplicación — mensajería y workers (RabbitMQ en Corte 3)
+  # Capa de aplicación — RabbitMQ y worker
   # internal: true bloquea salida a internet desde esta capa
   app_network:
     driver: bridge

@@ -9,8 +9,8 @@
 # Flujo de envío:
 #   1. Valida emisor y receptor consultando Redis primero, MariaDB como fallback
 #   2. Guarda el mensaje en MariaDB
-#   3. Incrementa contador de mensajes no leídos del receptor en Redis
-#   4. Notifica al receptor via WebSocket si está conectado
+#   3. Publica evento en RabbitMQ para procesamiento asíncrono
+#   4. El worker consume el evento, actualiza Redis y notifica via WebSocket
 
 from fastapi import APIRouter, HTTPException
 from app.models import (
@@ -20,10 +20,10 @@ from app.models import (
 from app.database import get_connection, release_connection
 from app.cache import (
     obtener_usuario_cache, cachear_usuario,
-    incrementar_mensajes_no_leidos,
     resetear_mensajes_no_leidos,
     obtener_mensajes_no_leidos
 )
+from app.queue import publicar
 from app.routers.websocket import manager
 
 router = APIRouter(tags=["Mensajes"])
@@ -59,9 +59,9 @@ async def enviar_mensaje(datos: MensajeCreate):
     """
     Envía un mensaje privado de un usuario a otro.
     Ambos usuarios deben estar registrados en el sistema.
-    El mensaje se persiste en MariaDB, el contador de no leídos
-    del receptor se incrementa en Redis, y se notifica al receptor
-    via WebSocket si está conectado en tiempo real.
+    El mensaje se persiste en MariaDB de forma síncrona garantizada.
+    La notificación al receptor se delega al worker via RabbitMQ,
+    demostrando el patrón de comunicación desacoplada de la Clase 9.
     """
     conn = await get_connection()
     try:
@@ -81,7 +81,8 @@ async def enviar_mensaje(datos: MensajeCreate):
                 detail="El receptor no existe. Verifica el receptor_id."
             )
 
-        # Guardar mensaje en MariaDB
+        # Persistir mensaje en MariaDB de forma síncrona
+        # La persistencia nunca se delega — es la fuente de verdad
         async with conn.cursor() as cursor:
             await cursor.execute(
                 """INSERT INTO mensajes (emisor_id, receptor_id, contenido)
@@ -97,15 +98,13 @@ async def enviar_mensaje(datos: MensajeCreate):
             )
             mensaje = await cursor.fetchone()
 
-        # Incrementar contador de no leídos del receptor en Redis
-        await incrementar_mensajes_no_leidos(datos.receptor_id)
-
-        # Notificar al receptor via WebSocket si está conectado.
-        # Si no está conectado, simplemente no hace nada.
-        # El frontend del receptor verá el mensaje en el próximo
-        # ciclo de polling como respaldo.
-        await manager.notify(datos.receptor_id, {
-            "tipo": "nuevo_mensaje",
+        # Publicar evento en RabbitMQ para procesamiento asíncrono.
+        # El worker consume este evento, actualiza Redis y
+        # notifica al receptor via WebSocket.
+        # Si RabbitMQ no está disponible, el mensaje ya está
+        # persistido — solo se pierde la notificación en tiempo real.
+        await publicar("mensajes", {
+            "receptor_id": datos.receptor_id,
             "emisor_id": datos.emisor_id,
             "emisor_nombre": nombre_emisor
         })
@@ -202,8 +201,6 @@ async def consultar_conversacion_bilateral(usuario_id: str, contacto_id: str):
     """
     Retorna el historial completo de mensajes entre dos usuarios,
     en ambas direcciones, ordenados cronológicamente.
-    Este endpoint es usado por el frontend para mostrar la conversación
-    completa sin necesidad de dos consultas separadas.
     """
     conn = await get_connection()
     try:

@@ -1,15 +1,17 @@
 # main.py
 # Punto de entrada del sistema.
 # Configura la aplicación, registra los routers y gestiona
-# el ciclo de vida de las conexiones a MariaDB, Redis y Ollama.
+# el ciclo de vida de las conexiones a MariaDB, Redis, Ollama y RabbitMQ.
 
 import os
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from app.routers import usuarios, mensajes, ia, websocket
+from app.routers.interno import router as interno_router
 from app.routers.ia import registrar_nodo_ia
 from app.database import conectar, desconectar, crear_tablas
 from app.cache import conectar_redis, desconectar_redis
+from app.queue import conectar_queue, desconectar_queue
 
 
 @asynccontextmanager
@@ -21,17 +23,21 @@ async def lifespan(app: FastAPI):
       2. Conecta a MariaDB
       3. Crea las tablas si no existen
       4. Registra el nodo IA como usuario del sistema
+      5. Conecta a RabbitMQ
     Al apagar:
       1. Cierra conexión a MariaDB
       2. Cierra conexión a Redis
+      3. Cierra conexión a RabbitMQ
     """
     await conectar_redis()
     await conectar()
     await crear_tablas()
     await registrar_nodo_ia()
+    await conectar_queue()
     yield
     await desconectar()
     await desconectar_redis()
+    await desconectar_queue()
 
 
 app = FastAPI(
@@ -49,6 +55,7 @@ app.include_router(usuarios.router)
 app.include_router(mensajes.router)
 app.include_router(ia.router)
 app.include_router(websocket.router)
+app.include_router(interno_router)
 
 
 @app.get("/", tags=["Estado"])
@@ -62,6 +69,7 @@ async def estado():
             "base_de_datos": "MariaDB",
             "cache": "Redis",
             "ia": f"Ollama {os.getenv('OLLAMA_MODEL', 'llama3.2:3b')}",
-            "tiempo_real": "WebSocket"
+            "tiempo_real": "WebSocket",
+            "mensajeria": "RabbitMQ"
         }
     }
