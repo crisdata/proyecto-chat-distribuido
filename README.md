@@ -63,9 +63,14 @@ está desacoplado mediante RabbitMQ.
 El sistema implementa tres redes Docker aisladas siguiendo las mejores
 prácticas de seguridad recomendadas por OWASP:
 
-- **public_network** — Red de entrada. Contiene el frontend y la API. Es la única red con acceso desde el exterior.
-- **app_network** (internal) — Contiene RabbitMQ y el worker. Bloqueada al exterior.
-- **data_network** (internal) — Contiene MariaDB, Redis y Ollama. Completamente aislada del exterior.
+**public_network** — Red de entrada. Contiene el frontend y la API.
+Es la única red con acceso desde el exterior.
+
+**app_network** — Red de mensajería (internal: true). Contiene RabbitMQ
+y el worker. Bloqueada al exterior.
+
+**data_network** — Red de datos (internal: true). Contiene MariaDB,
+Redis y Ollama. Completamente aislada del exterior.
 
 ---
 
@@ -103,7 +108,9 @@ El archivo `.env.example` ya contiene valores funcionales para desarrollo local.
 docker compose up --build -d
 ```
 
-Este comando construye las imágenes, descarga las dependencias y levanta los 7 contenedores en segundo plano. La primera ejecución tarda varios minutos.
+Este comando construye las imágenes, descarga las dependencias y levanta
+los 7 contenedores en segundo plano. La primera ejecución tarda varios
+minutos dependiendo de la velocidad de la conexión.
 
 ### 4. Descargar el modelo de inteligencia artificial
 
@@ -206,6 +213,10 @@ proyecto-chat-distribuido/
 # Ver contenedores con sus redes asignadas
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Networks}}"
 
+# Ver logs de un contenedor específico
+docker logs chat_api --tail 50
+docker logs chat_worker --tail 50
+
 # Ver logs en tiempo real
 docker logs chat_worker -f
 docker logs chat_api -f
@@ -213,12 +224,12 @@ docker logs chat_api -f
 # Verificar modelo de IA instalado
 docker exec chat_ollama ollama list
 
-# Limpiar datos para demo
+# Limpiar mensajes y usuarios para demo
 docker exec -it chat_db mariadb -u chat_user -pchat1234 chat_db \
   -e "DELETE FROM mensajes; DELETE FROM usuarios;"
 docker compose restart api
 
-# Apagar conservando datos
+# Apagar todos los servicios conservando los datos
 docker compose down
 
 # Apagar eliminando todos los datos
@@ -259,19 +270,24 @@ POST /mensaje_privado
 
 ## Conceptos distribuidos implementados
 
-- **Locks distribuidos con Redis** — evita condiciones de carrera en registros simultáneos con token UUID único.
-- **Caché con doble índice** — usuarios cacheados por ID y nombre, reduciendo consultas a MariaDB.
-- **Nodo lógico de IA** — Ollama se registra como usuario del sistema al arrancar.
-- **Pool de conexiones asíncrono** — aiomysql gestiona un pool compartido entre todos los endpoints.
-- **WebSocket con reconexión automática** — backoff exponencial desde 1s hasta 30s con indicador visual de estado.
-- **Mensajería asíncrona con RabbitMQ** — la API desacopla la persistencia de las notificaciones.
-- **Segmentación de redes por capas** — tres redes Docker con aislamiento progresivo según OWASP.
+**Locks distribuidos con Redis** — el registro de usuarios usa un lock con
+token UUID único para evitar condiciones de carrera en registros simultáneos.
 
----
+**Caché con doble índice** — los usuarios se cachean en Redis por ID y por
+nombre, reduciendo consultas a MariaDB.
 
-## Próximos pasos
+**Nodo lógico de IA** — Ollama se registra como usuario del sistema al
+arrancar, demostrando que la arquitectura soporta nodos no humanos.
 
-- Autenticación con JWT y contraseñas
-- Salas de chat grupales
-- Panel de monitoreo del sistema
-- Acceso desde red local (múltiples usuarios en la misma red)
+**Pool de conexiones asíncrono** — aiomysql gestiona un pool compartido
+entre todos los endpoints.
+
+**WebSocket con reconexión automática** — backoff exponencial desde 1s
+hasta 30s máximo con indicador visual de estado de conexión.
+
+**Mensajería asíncrona con RabbitMQ** — la API desacopla la persistencia
+de las notificaciones. El worker procesa eventos de forma independiente.
+
+**Segmentación de redes por capas** — tres redes Docker con aislamiento
+progresivo siguiendo las recomendaciones OWASP.
+
