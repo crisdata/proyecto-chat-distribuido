@@ -285,9 +285,9 @@ entre todos los endpoints.
 - **WebSocket con reconexión automática** — backoff exponencial desde 1s
 hasta 30s máximo con indicador visual de estado de conexión.
 
-**Mensajería asíncrona con RabbitMQ** — la API desacopla la persistencia
+- **Mensajería asíncrona con RabbitMQ** — la API desacopla la persistencia
 de las notificaciones. El worker procesa eventos de forma independiente.
 
-**Segmentación de redes por capas** — tres redes Docker con aislamiento
+- **Segmentación de redes por capas** — tres redes Docker con aislamiento
 progresivo siguiendo las recomendaciones OWASP.
 
