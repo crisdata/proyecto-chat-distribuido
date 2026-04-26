@@ -136,14 +136,18 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Networks}}"
 ```
 
 Resultado esperado:
+
+```
 NAMES             STATUS             NETWORKS
 chat_frontend     Up X minutes       proyecto1_public_network
-chat_api          Up X minutes       proyecto1_app_network, proyecto1_data_network, proyecto1_public_network
-chat_rabbitmq     Up X minutes       proyecto1_app_network, proyecto1_public_network
-chat_worker       Up X minutes       proyecto1_app_network, proyecto1_data_network
+chat_api          Up X minutes       proyecto1_app_network,proyecto1_data_network,proyecto1_public_network
+chat_rabbitmq     Up X minutes       proyecto1_app_network,proyecto1_public_network
+chat_worker       Up X minutes       proyecto1_app_network,proyecto1_data_network
 chat_redis        Up X minutes       proyecto1_data_network
 chat_db           Up X minutes       proyecto1_data_network
 chat_ollama       Up X minutes       proyecto1_data_network
+
+```
 
 ### 6. Abrir la aplicación
 
@@ -182,6 +186,8 @@ Usuario: `guest` — Contraseña: `guest`
 ---
 
 ## Estructura del proyecto
+
+```
 proyecto-chat-distribuido/
 ├── app/
 │   ├── main.py              # Punto de entrada y ciclo de vida
@@ -210,7 +216,7 @@ proyecto-chat-distribuido/
 ├── requirements.txt         # Dependencias Python
 └── .env.example             # Variables de entorno de referencia
 
----
+```
 
 ## Comandos útiles
 
@@ -246,25 +252,28 @@ docker compose up --build -d api
 ---
 
 ## Flujo de un mensaje en tiempo real
+
+```
 Usuario A escribe y envía mensaje
-│
-▼
+    │
+    ▼
 POST /mensaje_privado
-│
-├── Valida usuarios con Redis
-├── Persiste en MariaDB ← fuente de verdad
-├── Publica evento en RabbitMQ
-└── Retorna 201 al frontend
-│
-▼ (asíncrono)
-Worker consume evento
-│
-├── Llama POST /interno/notificar
-└── API notifica via WebSocket
-│
-▼
-Usuario B ve el mensaje
-en tiempo real
+    │
+    ├── Valida usuarios con Redis
+    ├── Persiste en MariaDB ← fuente de verdad
+    ├── Publica evento en RabbitMQ
+    └── Retorna 201 al frontend
+                │
+                ▼ (asíncrono)
+        Worker consume evento
+                │
+                ├── Llama POST /interno/notificar
+                └── API notifica via WebSocket
+                            │
+                            ▼
+                Usuario B ve el mensaje
+                en tiempo real
+```
 
 ---
 
