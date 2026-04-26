@@ -1,55 +1,24 @@
 services:
 
-  # ── Base de datos relacional ──────────────────────────────────────────
-  db:
-    image: mariadb:11
-    container_name: chat_db
+  # ── Frontend React + Nginx ────────────────────────────────────────────
+  # Único punto de entrada desde el exterior.
+  # Solo pertenece a public_network para evitar acceso directo a datos.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: chat_frontend
     restart: unless-stopped
-    env_file: .env
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    volumes:
-      - db_data:/var/lib/mysql
+    ports:
+      - "80:80"
+    depends_on:
+      - api
     networks:
-      - chat_network
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ── Sincronización distribuida y caché ───────────────────────────────
-  redis:
-    image: redis:7-alpine
-    container_name: chat_redis
-    restart: unless-stopped
-    networks:
-      - chat_network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ── Nodo de inteligencia artificial local ────────────────────────────
-  ollama:
-    image: ollama/ollama
-    container_name: chat_ollama
-    restart: unless-stopped
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - chat_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      - public_network
 
   # ── API principal ─────────────────────────────────────────────────────
+  # Mediador entre todas las capas.
+  # Pertenece a las tres redes porque coordina frontend, mensajería y datos.
   api:
     build:
       context: .
@@ -65,28 +34,87 @@ services:
       ollama:
         condition: service_started
     networks:
-      - chat_network
+      - public_network
+      - app_network
+      - data_network
 
-  # ── Frontend React + Nginx ────────────────────────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: chat_frontend
+  # ── Base de datos relacional ──────────────────────────────────────────
+  # Solo accesible desde la capa de datos.
+  # internal: true en data_network impide cualquier acceso externo.
+  db:
+    image: mariadb:11
+    container_name: chat_db
     restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - api
+    env_file: .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
     networks:
-      - chat_network
+      - data_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Caché y coordinación distribuida ─────────────────────────────────
+  # Solo accesible desde la capa de datos.
+  # Gestiona locks, caché de usuarios y contadores de no leídos.
+  redis:
+    image: redis:7-alpine
+    container_name: chat_redis
+    restart: unless-stopped
+    networks:
+      - data_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Nodo de inteligencia artificial local ────────────────────────────
+  # Solo accesible desde la capa de datos.
+  # Se registra como usuario del sistema al arrancar.
+  ollama:
+    image: ollama/ollama
+    container_name: chat_ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - data_network
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
 # ── Volúmenes persistentes ────────────────────────────────────────────
 volumes:
   db_data:
   ollama_data:
 
-# ── Red interna entre contenedores ───────────────────────────────────
+# ── Redes segmentadas por capa ────────────────────────────────────────
 networks:
-  chat_network:
+
+  # Capa pública — frontend y API expuestos al navegador
+  # No es internal para permitir que Nginx sirva al exterior
+  public_network:
     driver: bridge
+
+  # Capa de aplicación — mensajería y workers (RabbitMQ en Corte 3)
+  # internal: true bloquea salida a internet desde esta capa
+  app_network:
+    driver: bridge
+    internal: true
+
+  # Capa de datos — base de datos, caché e IA
+  # internal: true garantiza que ningún dato sea accesible desde fuera
+  data_network:
+    driver: bridge
+    internal: true

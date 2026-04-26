@@ -3,6 +3,8 @@
 Sistema de chat distribuido con comunicación privada entre usuarios,
 inteligencia artificial local y arquitectura completamente contenerizada.
 
+Desarrollado para la asignatura de Programación Distribuida — COTECNOVA.  
+
 ---
 
 ## ¿Qué hace este sistema?
@@ -16,30 +18,55 @@ preguntas y manteniendo contexto de la conversación.
 
 ## Arquitectura
 
-    ┌─────────────────────────────────────────────────────────┐
-    │                    Docker Network                        │
-    │                                                         │
-    │  ┌──────────┐    ┌──────────┐    ┌──────────────────┐  │
-    │  │  Nginx   │───▶│ FastAPI  │───▶│    MariaDB 11    │  │
-    │  │  :80     │    │  :8000   │    │    (chat_db)     │  │
-    │  │(Frontend)│    │(chat_api)│    └──────────────────┘  │
-    │  └──────────┘    │          │───▶┌──────────────────┐  │
-    │                  │          │    │    Redis 7        │  │
-    │                  │          │    │  (chat_redis)    │  │
-    │                  │          │───▶└──────────────────┘  │
-    │                  └──────────┘    ┌──────────────────┐  │
-    │                        │         │  Ollama llama3.2  │  │
-    │                        └────────▶│  (chat_ollama)   │  │
-    │                                  └──────────────────┘  │
-    └─────────────────────────────────────────────────────────┘
+    ┌─────────────────────────────────────────────────────────────┐
+    │                    public_network                            │
+    │                                                             │
+    │  ┌──────────┐              ┌──────────┐                     │
+    │  │  Nginx   │─────────────▶│ FastAPI  │                     │
+    │  │  :80     │              │  :8000   │                     │
+    │  │(Frontend)│              │(chat_api)│                     │
+    │  └──────────┘              └────┬─────┘                     │
+    └───────────────────────────────┬─┴─────────────────────────┘
+                                    │
+              ┌─────────────────────┼──────────────────────┐
+              │                     │                       │
+    ┌─────────▼──────────┐  ┌───────▼────────────────────────────┐
+    │   app_network      │  │         data_network               │
+    │   (internal)       │  │         (internal)                 │
+    │                    │  │                                     │
+    │  RabbitMQ (C3)     │  │  ┌─────────┐  ┌───────┐           │
+    │  Worker (C3)       │  │  │MariaDB11│  │Redis 7│           │
+    │                    │  │  └─────────┘  └───────┘           │
+    └────────────────────┘  │  ┌───────────────────┐            │
+                            │  │  Ollama llama3.2:3b│            │
+                            │  └───────────────────┘            │
+                            └────────────────────────────────────┘
 
-| Componente | Tecnología | Rol |
-|---|---|---|
-| Frontend | React 19 + Vite 8 + Tailwind 3 + Nginx | Interfaz de usuario |
-| API | FastAPI 0.135 + Uvicorn | Servidor principal |
-| Base de datos | MariaDB 11 + aiomysql | Persistencia |
-| Caché | Redis 7 | Locks distribuidos y caché |
-| IA | Ollama llama3.2:3b | Nodo participante del chat |
+| Componente | Tecnología | Red | Rol |
+|---|---|---|---|
+| Frontend | React 19 + Vite 8 + Tailwind 3 + Nginx | public | Interfaz de usuario |
+| API | FastAPI 0.135 + Uvicorn | public + app + data | Servidor principal |
+| Base de datos | MariaDB 11 + aiomysql | data | Persistencia |
+| Caché | Redis 7 | data | Locks distribuidos y caché |
+| IA | Ollama llama3.2:3b | data | Nodo participante del chat |
+| Mensajería | RabbitMQ (Corte 3) | app | Comunicación asíncrona |
+
+---
+
+## Segmentación de redes
+
+El sistema implementa tres redes Docker aisladas siguiendo las mejores
+prácticas de seguridad recomendadas por OWASP:
+
+**public_network** — Red de entrada. Contiene el frontend y la API.
+Es la única red con acceso desde el exterior.
+
+**app_network** — Red de mensajería (internal: true). Contendrá
+RabbitMQ y los workers en el Corte 3. Bloqueada al exterior.
+
+**data_network** — Red de datos (internal: true). Contiene MariaDB,
+Redis y Ollama. Completamente aislada del exterior. Ningún servicio
+de datos es accesible directamente desde fuera del sistema.
 
 ---
 
@@ -81,8 +108,9 @@ docker compose up --build -d
 ```
 
 Este comando construye las imágenes del backend y frontend, descarga las
-imágenes de MariaDB, Redis y Ollama, y levanta los 5 contenedores en
-segundo plano. La primera ejecución tarda varios minutos.
+imágenes de MariaDB, Redis y Ollama, crea las tres redes segmentadas y
+levanta los contenedores en segundo plano. La primera ejecución tarda
+varios minutos.
 
 ### 4. Descargar el modelo de inteligencia artificial
 
@@ -100,16 +128,16 @@ dependiendo de la velocidad de la conexión.
 ### 5. Verificar que todo está corriendo
 
 ```bash
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Networks}}"
 ```
 
-Deberías ver los 5 contenedores con estado `Up`:
-NAMES           STATUS          PORTS
-chat_frontend   Up X minutes    0.0.0.0:80->80/tcp
-chat_api        Up X minutes    8000/tcp
-chat_redis      Up X minutes    6379/tcp
-chat_db         Up X minutes    3306/tcp
-chat_ollama     Up X minutes    11434/tcp
+Deberías ver los 5 contenedores con sus redes correctamente asignadas:
+NAMES           STATUS           NETWORKS
+chat_frontend   Up X minutes     proyecto1_public_network
+chat_api        Up X minutes     proyecto1_app_network, proyecto1_data_network, proyecto1_public_network
+chat_redis      Up X minutes     proyecto1_data_network
+chat_db         Up X minutes     proyecto1_data_network
+chat_ollama     Up X minutes     proyecto1_data_network
 
 ### 6. Abrir la aplicación
 
@@ -161,7 +189,7 @@ proyecto-chat-distribuido/
 │   │   └── main.jsx      # Punto de entrada React
 │   ├── Dockerfile        # Build multistage: Node → Nginx
 │   └── nginx.conf        # Proxy /api y SPA fallback
-├── docker-compose.yml    # Orquestación de los 5 servicios
+├── docker-compose.yml    # Orquestación de los 5 servicios y 3 redes
 ├── Dockerfile            # Imagen del backend Python
 ├── requirements.txt      # Dependencias Python
 └── .env.example          # Variables de entorno de referencia
@@ -171,6 +199,9 @@ proyecto-chat-distribuido/
 ## Comandos útiles
 
 ```bash
+# Ver contenedores con sus redes asignadas
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Networks}}"
+
 # Ver logs de un contenedor específico
 docker logs chat_api --tail 50
 
@@ -188,6 +219,9 @@ docker compose down -v
 
 # Reiniciar un contenedor específico
 docker compose restart api
+
+# Limpiar redes huérfanas
+docker network prune
 ```
 
 ---
@@ -209,12 +243,6 @@ modificaciones al protocolo base.
 compartido entre todos los endpoints, evitando abrir y cerrar conexiones
 en cada solicitud.
 
----
-
-## Próximos pasos — Corte 3
-
-- Autenticación con JWT y contraseñas
-- WebSockets para mensajes en tiempo real
-- Salas de chat grupales
-- Panel de monitoreo del sistema
-- Contador de no leídos por contacto individual
+**Segmentación de redes por capas** — tres redes Docker con aislamiento
+progresivo siguiendo las recomendaciones OWASP. Los servicios de datos
+tienen `internal: true` y son completamente inaccesibles desde el exterior.
