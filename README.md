@@ -1,12 +1,7 @@
-bashnano ~/programacion-distribuida/proyecto1/README.md
-Reemplaza todo con esto:
-markdown# Chat Privado Distribuido — Grupo 4
+# Chat Privado Distribuido — Grupo 4
 
 Sistema de chat distribuido con comunicación privada entre usuarios,
 inteligencia artificial local y arquitectura completamente contenerizada.
-
-Desarrollado para la asignatura de Programación Distribuida — COTECNOVA.  
-**Integrantes:** Cristian David Giraldo · Juan Sebastián Pérez Guzmán
 
 ---
 
