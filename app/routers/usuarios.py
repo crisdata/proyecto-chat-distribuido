@@ -51,10 +51,19 @@ async def registrar_usuario(datos: UsuarioCreate):
             )
             existente = await cursor.fetchone()
             if existente:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"El nombre '{datos.nombre}' ya está registrado."
+                # Si el nombre ya existe, retornar ese usuario como login implícito
+                await cursor.execute(
+                    "SELECT id, nombre, creado_en FROM usuarios WHERE LOWER(nombre) = LOWER(%s)",
+                    (datos.nombre,)
                 )
+                usuario = await cursor.fetchone()
+                await liberar_lock(f"registro:{datos.nombre.lower()}", token_lock)
+                await release_connection(conn)
+                return {
+                    "id": usuario[0],
+                    "nombre": usuario[1],
+                    "creado_en": usuario[2].isoformat() if usuario[2] else None
+                }
 
             # Generar ID único y registrar el usuario
             nuevo_id = str(uuid.uuid4())
