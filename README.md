@@ -270,19 +270,19 @@ POST /mensaje_privado
 
 ## Conceptos distribuidos implementados
 
-**Locks distribuidos con Redis** — el registro de usuarios usa un lock con
+- **Locks distribuidos con Redis** — el registro de usuarios usa un lock con
 token UUID único para evitar condiciones de carrera en registros simultáneos.
 
-**Caché con doble índice** — los usuarios se cachean en Redis por ID y por
+- **Caché con doble índice** — los usuarios se cachean en Redis por ID y por
 nombre, reduciendo consultas a MariaDB.
 
-**Nodo lógico de IA** — Ollama se registra como usuario del sistema al
+- **Nodo lógico de IA** — Ollama se registra como usuario del sistema al
 arrancar, demostrando que la arquitectura soporta nodos no humanos.
 
-**Pool de conexiones asíncrono** — aiomysql gestiona un pool compartido
+- **Pool de conexiones asíncrono** — aiomysql gestiona un pool compartido
 entre todos los endpoints.
 
-**WebSocket con reconexión automática** — backoff exponencial desde 1s
+- **WebSocket con reconexión automática** — backoff exponencial desde 1s
 hasta 30s máximo con indicador visual de estado de conexión.
 
 **Mensajería asíncrona con RabbitMQ** — la API desacopla la persistencia
