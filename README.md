@@ -3,9 +3,6 @@
 Sistema de chat distribuido con comunicación privada entre usuarios,
 inteligencia artificial local y arquitectura completamente contenerizada.
 
-Desarrollado para la asignatura de Programación Distribuida — COTECNOVA.  
-**Integrantes:** Cristian David Giraldo · Juan Sebastián Pérez Guzmán
-
 ---
 
 ## ¿Qué hace este sistema?
