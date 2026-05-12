@@ -22,3 +22,6 @@ pydantic==2.12.5
 
 # RabbitMQ — cliente asíncrono compatible con asyncio y FastAPI
 aio-pika==9.4.3
+
+# Autenticación JWT (Bloque 2)
+pyjwt==2.10.1

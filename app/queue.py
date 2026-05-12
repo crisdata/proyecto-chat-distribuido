@@ -1,20 +1,17 @@
 # queue.py
 # Gestiona la conexión a RabbitMQ y la publicación de eventos.
 # Usa aio-pika para compatibilidad total con asyncio y FastAPI.
-#
-# El módulo expone dos funciones principales:
-#   conectar_queue()  — crea la conexión al arrancar la aplicación
-#   publicar()        — publica un evento en la cola especificada
-#
-# La cola 'mensajes' transporta eventos de mensajes enviados.
-# El worker consume esa cola y actúa de forma desacoplada.
+
+import logging
+import os
+import json
 
 import aio_pika
-import json
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
+log = logging.getLogger("queue")
 
 # Conexión y canal compartidos por toda la aplicación
 _conexion = None
@@ -41,6 +38,7 @@ async def conectar_queue():
     # Declarar la cola como durable para que sobreviva reinicios
     # de RabbitMQ sin perder mensajes en tránsito
     await _canal.declare_queue("mensajes", durable=True)
+    log.info("Cola 'mensajes' declarada en RabbitMQ")
 
 
 async def desconectar_queue():
@@ -48,6 +46,7 @@ async def desconectar_queue():
     global _conexion
     if _conexion:
         await _conexion.close()
+        log.info("Conexión RabbitMQ cerrada")
 
 
 async def publicar(cola: str, evento: dict):
@@ -68,4 +67,4 @@ async def publicar(cola: str, evento: dict):
     except Exception as e:
         # RabbitMQ no disponible — el mensaje ya está en MariaDB,
         # solo se pierde la notificación asíncrona
-        print(f"[queue] Error al publicar en {cola}: {e}")
+        log.warning(f"No se pudo publicar evento en cola '{cola}': {e}")

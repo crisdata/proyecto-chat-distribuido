@@ -3,15 +3,26 @@
 # Configura la aplicación, registra los routers y gestiona
 # el ciclo de vida de las conexiones a MariaDB, Redis, Ollama y RabbitMQ.
 
+import logging
 import os
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
+
+from app.logging_config import configurar_logging
+
+# Configurar logging ANTES de importar cualquier otro módulo de la app,
+# para que todos los módulos vean el formato configurado al cargar
+# sus propios loggers a nivel de módulo.
+configurar_logging()
+
 from app.routers import usuarios, mensajes, ia, websocket
 from app.routers.interno import router as interno_router
 from app.routers.ia import registrar_nodo_ia
 from app.database import conectar, desconectar, crear_tablas
 from app.cache import conectar_redis, desconectar_redis
 from app.queue import conectar_queue, desconectar_queue
+
+log = logging.getLogger("api")
 
 
 @asynccontextmanager
@@ -24,20 +35,34 @@ async def lifespan(app: FastAPI):
       3. Crea las tablas si no existen
       4. Registra el nodo IA como usuario del sistema
       5. Conecta a RabbitMQ
-    Al apagar:
-      1. Cierra conexión a MariaDB
-      2. Cierra conexión a Redis
-      3. Cierra conexión a RabbitMQ
+    Al apagar: cierra todas las conexiones en orden inverso.
     """
+    log.info("Arrancando API")
+
+    log.info("Conectando a Redis")
     await conectar_redis()
+
+    log.info("Conectando a MariaDB")
     await conectar()
+
+    log.info("Verificando tablas")
     await crear_tablas()
+
+    log.info("Registrando nodo IA")
     await registrar_nodo_ia()
+
+    log.info("Conectando a RabbitMQ")
     await conectar_queue()
+
+    log.info("API lista para recibir solicitudes")
+
     yield
+
+    log.info("Apagando API")
     await desconectar()
     await desconectar_redis()
     await desconectar_queue()
+    log.info("API apagada limpiamente")
 
 
 app = FastAPI(
@@ -50,7 +75,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Registrar routers en orden lógico
 app.include_router(usuarios.router)
 app.include_router(mensajes.router)
 app.include_router(ia.router)

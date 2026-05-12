@@ -28,14 +28,22 @@ class UsuarioResponse(BaseModel):
     """Datos que el sistema devuelve después de registrar un usuario."""
     id: str
     nombre: str
-    # datetime permite que Pydantic serialice automáticamente
-    # el objeto datetime de MariaDB a formato ISO 8601
     creado_en: Optional[datetime] = None
 
     class Config:
-        # Permite que Pydantic lea objetos datetime directamente
-        # desde los resultados de aiomysql sin conversión manual
         from_attributes = True
+
+
+class UsuarioAutenticadoResponse(BaseModel):
+    """
+    Respuesta del endpoint de registro/login.
+    Incluye el token JWT que el cliente debe usar para autenticar
+    sus llamadas posteriores y la conexión WebSocket.
+    """
+    id: str
+    nombre: str
+    creado_en: Optional[datetime] = None
+    token: str
 
 
 # ── Mensajes ──────────────────────────────────────────────────────────────────
@@ -63,7 +71,6 @@ class MensajeResponse(BaseModel):
     emisor_id: str
     receptor_id: str
     contenido: str
-    # datetime coherente con el campo TIMESTAMP de MariaDB
     timestamp: datetime
 
     class Config:
@@ -80,6 +87,7 @@ class RespuestaExito(BaseModel):
 class RespuestaError(BaseModel):
     """Respuesta estándar para errores controlados del sistema."""
     detalle: str
+
 
 # ── Mensajes no leídos ──────────────────────────────────────────────────────
 

@@ -6,7 +6,7 @@
 #
 # Corte 3 — estructuras preparadas:
 #   - Caché de tokens JWT para autenticación
-#   - Lock mejorado con token único para alta concurrencia
+#   - Lock mejorado con token único y liberación atómica via Lua
 
 import redis.asyncio as aioredis
 import os
@@ -17,6 +17,19 @@ load_dotenv()
 
 # Cliente Redis compartido por toda la aplicación
 cliente_redis = None
+
+# Script Lua para liberación atómica del lock.
+# Redis garantiza que los scripts Lua se ejecutan sin interrupción,
+# evitando la condición de carrera entre GET y DELETE.
+# Retorna 1 si liberó el lock, 0 si el token no coincidía
+# (lo que indica que el lock ya había expirado y fue tomado por otro).
+LUA_LIBERAR_LOCK = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+else
+    return 0
+end
+"""
 
 
 async def conectar_redis():
@@ -62,14 +75,23 @@ async def adquirir_lock(nombre: str, tiempo_expiracion: int = 5) -> str | None:
     return token if resultado else None
 
 
-async def liberar_lock(nombre: str, token: str):
+async def liberar_lock(nombre: str, token: str) -> bool:
     """
-    Libera un lock distribuido solo si el token coincide con el
-    que lo adquirió. Previene que un proceso libere el lock de otro.
+    Libera un lock distribuido de forma atómica usando un script Lua.
+    Solo libera si el token coincide con el que adquirió el lock,
+    previniendo que un proceso libere el lock de otro.
+
+    Retorna True si liberó el lock correctamente.
+    Retorna False si el lock ya había expirado o pertenecía a otro proceso
+    (esto puede indicar que la operación crítica tardó más que el TTL del lock).
     """
-    valor_actual = await cliente_redis.get(f"lock:{nombre}")
-    if valor_actual == token:
-        await cliente_redis.delete(f"lock:{nombre}")
+    resultado = await cliente_redis.eval(
+        LUA_LIBERAR_LOCK,
+        1,                    # número de KEYS
+        f"lock:{nombre}",     # KEYS[1]
+        token                 # ARGV[1]
+    )
+    return resultado == 1
 
 
 # ── Caché de usuarios ─────────────────────────────────────────────────────────
@@ -147,4 +169,3 @@ async def cerrar_sesion(usuario_id: str):
     Útil para logout o para forzar re-autenticación por seguridad.
     """
     await cliente_redis.delete(f"sesion:{usuario_id}")
-

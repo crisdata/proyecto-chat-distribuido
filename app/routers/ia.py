@@ -18,6 +18,7 @@ from app.cache import (
     cachear_usuario,
     get_redis
 )
+from app.queue import publicar
 
 load_dotenv()
 
@@ -27,10 +28,6 @@ router = APIRouter(prefix="/ia", tags=["Inteligencia Artificial"])
 NOMBRE_IA = "Asistente IA"
 MODELO_IA = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_URL = f"http://{os.getenv('OLLAMA_HOST', 'ollama')}:{os.getenv('OLLAMA_PORT', '11434')}"
-
-# Nota Corte 3: el AsyncClient se crea en cada llamada.
-# En el Corte 3 se reemplaza por un cliente único reutilizable
-# para reducir overhead de conexión bajo carga alta.
 
 
 async def obtener_id_ia() -> str | None:
@@ -46,15 +43,10 @@ async def registrar_nodo_ia():
     """
     Registra el nodo IA como usuario del sistema si no existe.
     Se llama una vez al arrancar el servidor desde main.py.
-    El nodo IA usa el mismo modelo de datos que cualquier usuario humano,
-    lo que demuestra que la arquitectura soporta cualquier tipo de nodo
-    sin modificaciones al sistema base.
     """
     conn = await get_connection()
     try:
         async with conn.cursor() as cursor:
-
-            # Verificar si el nodo IA ya está registrado en MariaDB
             await cursor.execute(
                 "SELECT id FROM usuarios WHERE nombre = %s",
                 (NOMBRE_IA,)
@@ -62,17 +54,14 @@ async def registrar_nodo_ia():
             existente = await cursor.fetchone()
 
             if existente:
-                # Ya existe, recuperar su ID
                 ia_id = existente[0]
             else:
-                # Primera vez que arranca el sistema, registrar el nodo IA
                 ia_id = str(uuid.uuid4())
                 await cursor.execute(
                     "INSERT INTO usuarios (id, nombre) VALUES (%s, %s)",
                     (ia_id, NOMBRE_IA)
                 )
 
-        # Guardar ID en Redis con TTL de 24 horas para acceso rápido
         redis = get_redis()
         await redis.set("ia:id", ia_id)
         await cachear_usuario(ia_id, NOMBRE_IA, ttl=86400)
@@ -86,13 +75,12 @@ async def registrar_nodo_ia():
 async def generar_respuesta_ia(mensaje: str, historial: list) -> str:
     """
     Envía el mensaje a Ollama con el historial reciente como contexto.
-    El historial permite que la IA recuerde lo que se habló antes
-    en la misma conversación, dando coherencia a las respuestas.
+    El historial llega ya limitado a los últimos 10 mensajes en orden
+    cronológico ascendente desde el llamador.
     Lanza HTTPException 503 si Ollama no está disponible.
     """
     cliente = AsyncClient(host=OLLAMA_URL)
 
-    # Sistema: define el comportamiento del nodo IA dentro del chat
     mensajes = [
         {
             "role": "system",
@@ -104,14 +92,12 @@ async def generar_respuesta_ia(mensaje: str, historial: list) -> str:
         }
     ]
 
-    # Incluir los últimos 10 mensajes del historial como contexto
-    for h in historial[-10:]:
+    for h in historial:
         mensajes.append({
             "role": "user" if h["es_usuario"] else "assistant",
             "content": h["contenido"]
         })
 
-    # Agregar el mensaje actual del usuario
     mensajes.append({"role": "user", "content": mensaje})
 
     try:
@@ -131,10 +117,13 @@ async def generar_respuesta_ia(mensaje: str, historial: list) -> str:
 async def mensaje_a_ia(datos: MensajeCreate):
     """
     Envía un mensaje al nodo IA y retorna su respuesta.
-    El nodo IA responde usando el historial de la conversación
-    para mantener contexto entre mensajes.
-    Tanto el mensaje del usuario como la respuesta de la IA
-    se persisten en MariaDB como mensajes normales del sistema.
+    Usa los 10 mensajes más recientes de la conversación como contexto
+    para mantener coherencia entre turnos.
+
+    Después de persistir la respuesta, publica un evento en RabbitMQ
+    para que el worker notifique al usuario via WebSocket. Esto garantiza
+    que si el usuario tiene el chat abierto en otra pestaña o dispositivo,
+    también vea la respuesta de la IA en tiempo real.
     """
     conn = await get_connection()
     try:
@@ -158,19 +147,25 @@ async def mensaje_a_ia(datos: MensajeCreate):
                 detail="El nodo IA no está inicializado. Intenta de nuevo en unos segundos."
             )
 
-        # Obtener historial de la conversación entre el usuario y la IA
+        # Obtener los 10 mensajes MÁS RECIENTES de la conversación
+        # entre el usuario y la IA. Usamos DESC LIMIT 10 para sacar los
+        # recientes y los reordenamos cronológicamente con la subconsulta
+        # para que el modelo los lea en orden de viejo a nuevo.
         async with conn.cursor() as cursor:
             await cursor.execute(
-                """SELECT emisor_id, contenido FROM mensajes
-                   WHERE (emisor_id = %s AND receptor_id = %s)
-                      OR (emisor_id = %s AND receptor_id = %s)
-                   ORDER BY timestamp ASC
-                   LIMIT 10""",
+                """SELECT emisor_id, contenido FROM (
+                       SELECT emisor_id, contenido, timestamp
+                       FROM mensajes
+                       WHERE (emisor_id = %s AND receptor_id = %s)
+                          OR (emisor_id = %s AND receptor_id = %s)
+                       ORDER BY timestamp DESC
+                       LIMIT 10
+                   ) sub
+                   ORDER BY timestamp ASC""",
                 (datos.emisor_id, ia_id, ia_id, datos.emisor_id)
             )
             historial_raw = await cursor.fetchall()
 
-        # Construir historial en formato que entiende generar_respuesta_ia
         historial = [
             {
                 "es_usuario": h[0] == datos.emisor_id,
@@ -190,7 +185,7 @@ async def mensaje_a_ia(datos: MensajeCreate):
                 (datos.emisor_id, ia_id, datos.contenido)
             )
 
-            # Persistir la respuesta de la IA como mensaje del nodo IA
+            # Persistir la respuesta de la IA
             await cursor.execute(
                 """INSERT INTO mensajes (emisor_id, receptor_id, contenido)
                    VALUES (%s, %s, %s)""",
@@ -198,13 +193,23 @@ async def mensaje_a_ia(datos: MensajeCreate):
             )
             respuesta_id = cursor.lastrowid
 
-            # Obtener el mensaje completo con su timestamp generado por MariaDB
             await cursor.execute(
                 """SELECT id, emisor_id, receptor_id, contenido, timestamp
                    FROM mensajes WHERE id = %s""",
                 (respuesta_id,)
             )
             respuesta = await cursor.fetchone()
+
+        # Publicar evento en RabbitMQ para notificar al usuario en
+        # cualquier otra pestaña o dispositivo donde tenga el chat abierto.
+        # El emisor es la IA, el receptor es el usuario humano.
+        # Si RabbitMQ falla, el response HTTP ya devuelve la respuesta,
+        # solo se pierde la notificación a otras pestañas.
+        await publicar("mensajes", {
+            "receptor_id": datos.emisor_id,
+            "emisor_id": ia_id,
+            "emisor_nombre": NOMBRE_IA
+        })
 
         return {
             "id": respuesta[0],
@@ -222,7 +227,6 @@ async def mensaje_a_ia(datos: MensajeCreate):
 async def estado_ia():
     """
     Verifica que el nodo IA está disponible y responde.
-    El frontend usa este endpoint para mostrar si la IA está en línea.
     """
     try:
         cliente = AsyncClient(host=OLLAMA_URL)

@@ -1,13 +1,33 @@
 // services/api.js
 // Centraliza todas las llamadas a la API del backend.
 // Todos los componentes importan desde aquí, nunca hacen fetch directamente.
-// BASE_URL usa /api que en desarrollo Vite redirige a FastAPI mediante proxy,
-// y en producción Nginx hace el mismo trabajo sin cambiar una sola línea.
 
 const BASE_URL = '/api';
 const WS_URL = window.location.protocol === 'https:'
   ? `wss://${window.location.host}/ws`
   : `ws://${window.location.host}/ws`;
+
+// ── Token JWT ─────────────────────────────────────────────────────────────
+// El token se guarda en memoria y en sessionStorage para sobrevivir reloads.
+
+let _token = sessionStorage.getItem('chat_token') || null;
+
+export function getToken() {
+  return _token;
+}
+
+export function setToken(token) {
+  _token = token;
+  if (token) {
+    sessionStorage.setItem('chat_token', token);
+  } else {
+    sessionStorage.removeItem('chat_token');
+  }
+}
+
+function authHeaders() {
+  return _token ? { 'Authorization': `Bearer ${_token}` } : {};
+}
 
 // ── Usuarios ──────────────────────────────────────────────────────────────
 
@@ -21,7 +41,10 @@ export async function registrarUsuario(nombre) {
     const error = await res.json();
     throw new Error(error.detail || 'Error al registrar usuario');
   }
-  return res.json();
+  const data = await res.json();
+  // Guardar el token automáticamente al registrarse
+  if (data.token) setToken(data.token);
+  return data;
 }
 
 export async function listarUsuarios() {
@@ -30,8 +53,6 @@ export async function listarUsuarios() {
   return res.json();
 }
 
-// Obtiene el ID real del nodo IA desde la lista de usuarios.
-// El nodo IA se registra con el nombre "Asistente IA" al arrancar el servidor.
 export async function obtenerIdIA() {
   const usuarios = await listarUsuarios();
   const ia = usuarios.find(u => u.nombre === 'Asistente IA');
@@ -43,7 +64,10 @@ export async function obtenerIdIA() {
 export async function enviarMensaje(emisor_id, receptor_id, contenido) {
   const res = await fetch(`${BASE_URL}/mensaje_privado`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders()
+    },
     body: JSON.stringify({ emisor_id, receptor_id, contenido }),
   });
   if (!res.ok) {
@@ -70,7 +94,10 @@ export async function obtenerNoLeidos(usuario_id) {
 export async function enviarMensajeIA(emisor_id, ia_id, contenido) {
   const res = await fetch(`${BASE_URL}/ia/mensaje`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders()
+    },
     body: JSON.stringify({ emisor_id, receptor_id: ia_id, contenido }),
   });
   if (!res.ok) {
@@ -93,15 +120,8 @@ export async function estadoIA() {
 
 /**
  * Crea y gestiona una conexión WebSocket con reconexión automática.
- *
- * onMensaje   — callback que se ejecuta al recibir una notificación
- * onEstado    — callback que recibe 'conectado' | 'reconectando' | 'desconectado'
- *
- * Retorna una función para cerrar la conexión manualmente,
- * usada en el cleanup del useEffect de Chat.jsx.
- *
- * Backoff exponencial:
- *   intento 1 → 1s, intento 2 → 2s, intento 3 → 4s ... máximo 30s
+ * El token JWT se pasa como query parameter porque los WebSockets del
+ * navegador no permiten headers personalizados.
  */
 export function crearWebSocket(usuarioId, onMensaje, onEstado) {
   let intentos = 0
@@ -112,7 +132,13 @@ export function crearWebSocket(usuarioId, onMensaje, onEstado) {
   function conectar() {
     if (cerradoManualmente) return
 
-    ws = new WebSocket(`${WS_URL}/${usuarioId}`)
+    const token = getToken()
+    if (!token) {
+      onEstado('desconectado')
+      return
+    }
+
+    ws = new WebSocket(`${WS_URL}/${usuarioId}?token=${encodeURIComponent(token)}`)
 
     ws.onopen = () => {
       intentos = 0
@@ -128,10 +154,13 @@ export function crearWebSocket(usuarioId, onMensaje, onEstado) {
       }
     }
 
-    ws.onclose = () => {
+    ws.onclose = (evento) => {
       if (cerradoManualmente) return
-      // Calcular tiempo de espera con backoff exponencial
-      // mínimo 1s, máximo 30s
+      // Si fue cierre por autenticación (4001/4003), no reintentar
+      if (evento.code === 4001 || evento.code === 4003) {
+        onEstado('desconectado')
+        return
+      }
       const espera = Math.min(1000 * Math.pow(2, intentos), 30000)
       intentos++
       onEstado('reconectando')
@@ -139,14 +168,12 @@ export function crearWebSocket(usuarioId, onMensaje, onEstado) {
     }
 
     ws.onerror = () => {
-      // Forzar onclose para disparar la reconexión
       ws.close()
     }
   }
 
   conectar()
 
-  // Retorna función de cierre manual para el cleanup de useEffect
   return function cerrar() {
     cerradoManualmente = true
     clearTimeout(timeoutId)
@@ -157,8 +184,6 @@ export function crearWebSocket(usuarioId, onMensaje, onEstado) {
 // ── Utilidades ────────────────────────────────────────────────────────────
 
 export function formatearHora(timestamp) {
-  // Agrega 'Z' si no tiene zona horaria para que JavaScript
-  // lo interprete como UTC y lo convierta correctamente a hora local
   const ts = timestamp.endsWith('Z') ? timestamp : timestamp + 'Z'
   const fecha = new Date(ts)
   return fecha.toLocaleTimeString('es-CO', {
