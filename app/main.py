@@ -5,7 +5,7 @@
 
 import logging
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 
 from app.logging_config import configurar_logging
@@ -21,6 +21,11 @@ from app.routers.ia import registrar_nodo_ia
 from app.database import conectar, desconectar, crear_tablas
 from app.cache import conectar_redis, desconectar_redis
 from app.queue import conectar_queue, desconectar_queue
+from app.request_id import (
+    set_request_id,
+    generar_request_id,
+    get_request_id,
+)
 
 log = logging.getLogger("api")
 
@@ -29,12 +34,7 @@ log = logging.getLogger("api")
 async def lifespan(app: FastAPI):
     """
     Gestiona el ciclo de vida de la aplicación.
-    Al arrancar:
-      1. Conecta a Redis
-      2. Conecta a MariaDB
-      3. Crea las tablas si no existen
-      4. Registra el nodo IA como usuario del sistema
-      5. Conecta a RabbitMQ
+    Al arrancar: conecta Redis, MariaDB, registra nodo IA, conecta RabbitMQ.
     Al apagar: cierra todas las conexiones en orden inverso.
     """
     log.info("Arrancando API")
@@ -74,6 +74,37 @@ app = FastAPI(
     version="3.0.0",
     lifespan=lifespan
 )
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """
+    Middleware que gestiona el request_id de cada petición HTTP.
+    
+    Flujo:
+      1. Si el cliente envía el header X-Request-ID, lo respetamos
+         (útil cuando el worker propaga el ID en sus llamadas internas).
+      2. Si no, generamos uno nuevo.
+      3. Lo establecemos en el ContextVar para que todos los logs
+         de esta petición lo lleven automáticamente.
+      4. Después de procesar, lo devolvemos al cliente en el header
+         de respuesta para que pueda usarlo si lo necesita.
+    """
+    # Aceptar request_id entrante si el cliente (típicamente el worker
+    # o un cliente HTTP que ya está en una cadena) lo propaga.
+    rid_entrante = request.headers.get("X-Request-ID")
+    request_id = rid_entrante if rid_entrante else generar_request_id()
+
+    set_request_id(request_id)
+
+    # Procesar la petición normalmente
+    response = await call_next(request)
+
+    # Devolver el request_id al cliente para que pueda referenciarlo
+    response.headers["X-Request-ID"] = request_id
+
+    return response
+
 
 app.include_router(usuarios.router)
 app.include_router(mensajes.router)

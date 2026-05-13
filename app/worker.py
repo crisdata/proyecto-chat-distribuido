@@ -6,13 +6,9 @@
 #   1. Consumir eventos de la cola "mensajes"
 #   2. Llamar al endpoint interno de la API para notificar via WebSocket
 #   3. Reintentar bajo fallos transitorios y descartar tras 3 intentos
-#
-# Diseño:
-#   - Una sola aiohttp.ClientSession compartida (creada en main).
-#   - Prefetch de 5 mensajes para concurrencia controlada.
-#   - Reintentos: el mensaje vuelve a la cola si la API falla con 5xx
-#     o hay error de red. Después de MAX_REINTENTOS, se descarta.
-#   - Logging estructurado con niveles INFO, WARNING y ERROR.
+#   4. Mantener la trazabilidad mediante request_id que llega en el
+#      payload del mensaje y se propaga al header HTTP de la llamada
+#      interna a la API.
 
 import asyncio
 import json
@@ -23,6 +19,9 @@ import sys
 import aio_pika
 import aiohttp
 from dotenv import load_dotenv
+
+from app.request_id import set_request_id, get_request_id
+from app.logging_config import configurar_logging
 
 load_dotenv()
 
@@ -44,25 +43,14 @@ if not WORKER_SECRET:
         "El worker no puede autenticarse contra la API sin él."
     )
 
-# Cuántos mensajes procesa el worker en paralelo.
-# Un valor bajo evita saturar la API; uno alto aprovecha asyncio.
 PREFETCH = 5
-
-# Cuántas veces reintentamos un mensaje antes de descartarlo.
-# El conteo se lleva en el header 'x-reintentos' del mensaje.
 MAX_REINTENTOS = 3
-
-# Tiempo de espera HTTP por llamada a la API interna.
 TIMEOUT_HTTP_SEGUNDOS = 10
 
 # ── Logging ────────────────────────────────────────────────────────────────
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - [worker] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    stream=sys.stdout,
-)
+# Reutilizamos la misma configuración de logging que la API para mantener
+# el formato consistente con request_id automático.
+configurar_logging()
 log = logging.getLogger("worker")
 
 
@@ -76,11 +64,9 @@ async def llamar_api_notificar(
 ) -> tuple[bool, bool]:
     """
     Llama al endpoint interno de la API.
-    Retorna (exito, recuperable):
-      - exito=True si la API respondió 200 OK
-      - recuperable=True si el fallo es transitorio (5xx, red caída)
-        y el mensaje merece reintento. False para errores definitivos
-        (403, 422, etc.) que no van a mejorar reintentando.
+    Propaga el request_id actual via header X-Request-ID para que la
+    API continúe la cadena de trazabilidad en sus propios logs.
+    Retorna (exito, recuperable).
     """
     try:
         async with session.post(
@@ -90,7 +76,10 @@ async def llamar_api_notificar(
                 "emisor_id": emisor_id,
                 "emisor_nombre": emisor_nombre,
             },
-            headers={"X-Worker-Secret": WORKER_SECRET},
+            headers={
+                "X-Worker-Secret": WORKER_SECRET,
+                "X-Request-ID": get_request_id(),
+            },
             timeout=aiohttp.ClientTimeout(total=TIMEOUT_HTTP_SEGUNDOS),
         ) as respuesta:
             if respuesta.status == 200:
@@ -100,13 +89,12 @@ async def llamar_api_notificar(
                     "Autenticación rechazada por la API. "
                     "Verifica que WORKER_SECRET coincida en api y worker."
                 )
-                return False, False  # no recuperable
+                return False, False
             if respuesta.status >= 500:
                 log.warning(
                     f"API respondió {respuesta.status}, reintento programado"
                 )
-                return False, True  # recuperable
-            # 4xx no autorizados arriba (400, 422) — error de datos
+                return False, True
             log.error(
                 f"API respondió {respuesta.status} (error de datos), "
                 f"el mensaje será descartado"
@@ -126,12 +114,9 @@ async def procesar_mensaje(
 ):
     """
     Procesa un evento de mensaje recibido de la cola.
-    Estrategia de manejo de errores:
-      - Si la API responde OK → ack (mensaje confirmado).
-      - Si el error es no recuperable → ack (descartado, no tiene sentido reintentar).
-      - Si el error es recuperable y aún hay reintentos disponibles →
-        publicar copia con contador incrementado y ack del original.
-      - Si el error es recuperable pero ya agotamos reintentos → ack y log de error.
+    Lo primero que hace es adoptar el request_id del evento en su
+    propio ContextVar, para que todos los logs de este procesamiento
+    lleven automáticamente el ID original que generó la API.
     """
     try:
         evento = json.loads(message.body.decode())
@@ -139,6 +124,13 @@ async def procesar_mensaje(
         log.error(f"Evento con JSON inválido, descartado: {message.body!r}")
         await message.ack()
         return
+
+    # Adoptar el request_id del evento para que los logs del worker
+    # mantengan la cadena de trazabilidad iniciada en la API.
+    # Si el evento no trae request_id (mensaje antiguo o malformado),
+    # usamos "-" como marcador de "sin trazabilidad".
+    request_id = evento.get("request_id", "-")
+    set_request_id(request_id)
 
     receptor_id = evento.get("receptor_id")
     emisor_id = evento.get("emisor_id")
@@ -149,7 +141,8 @@ async def procesar_mensaje(
         await message.ack()
         return
 
-    # Conteo de reintentos llevado en headers del mensaje
+    log.info(f"Evento recibido de {emisor_nombre} para {receptor_id}")
+
     headers = message.headers or {}
     intento = int(headers.get("x-reintentos", 0))
 
@@ -163,11 +156,9 @@ async def procesar_mensaje(
         return
 
     if not recuperable:
-        # Error definitivo, no tiene sentido reintentar
         await message.ack()
         return
 
-    # Error recuperable: ¿queda presupuesto de reintentos?
     if intento + 1 >= MAX_REINTENTOS:
         log.error(
             f"Mensaje descartado tras {MAX_REINTENTOS} reintentos: "
@@ -176,12 +167,7 @@ async def procesar_mensaje(
         await message.ack()
         return
 
-    # Republicamos el mensaje con el contador incrementado
-    await republicar_con_reintento(
-        message,
-        evento,
-        intento + 1,
-    )
+    await republicar_con_reintento(message, evento, intento + 1)
     log.warning(
         f"Reintento {intento + 1}/{MAX_REINTENTOS} programado: "
         f"{emisor_nombre} → {receptor_id}"
@@ -195,9 +181,9 @@ async def republicar_con_reintento(
     nuevo_intento: int,
 ):
     """
-    Publica una copia del mensaje en la misma cola con el contador
-    de reintentos actualizado. Usa el canal del mensaje original
-    para no abrir conexiones nuevas.
+    Republica el mensaje en la misma cola con el contador de reintentos
+    actualizado. El request_id permanece en el body del evento para
+    mantener la trazabilidad a través de los reintentos.
     """
     canal = message.channel
     nuevo_mensaje = aio_pika.Message(
@@ -205,8 +191,6 @@ async def republicar_con_reintento(
         delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         headers={"x-reintentos": nuevo_intento},
     )
-    # Pequeña pausa antes de republicar para no saturar la API
-    # cuando está caída — backoff lineal simple.
     await asyncio.sleep(2 * nuevo_intento)
     await canal.default_exchange.publish(
         nuevo_mensaje,
@@ -223,25 +207,20 @@ async def main():
     """
     log.info("Iniciando worker")
 
-    # Conexión robusta — aio-pika reconecta automáticamente si RabbitMQ cae.
     conexion = await aio_pika.connect_robust(RABBITMQ_URL)
     canal = await conexion.channel()
     await canal.set_qos(prefetch_count=PREFETCH)
     cola = await canal.declare_queue("mensajes", durable=True)
 
-    # Sesión HTTP única y reutilizable durante toda la vida del worker
     session = aiohttp.ClientSession()
 
     log.info(f"Escuchando cola 'mensajes' (prefetch={PREFETCH})")
 
     try:
-        # callback que captura la session por closure
         async def callback(message: aio_pika.IncomingMessage):
             await procesar_mensaje(message, session)
 
         await cola.consume(callback)
-
-        # Mantener el worker corriendo indefinidamente
         await asyncio.Future()
     finally:
         log.info("Cerrando worker")

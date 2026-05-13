@@ -2,25 +2,44 @@
 // Componente raíz de la aplicación.
 // Gestiona el estado global: usuario autenticado, contactos,
 // contacto seleccionado e ID del nodo IA.
+// Al cargar, intenta restaurar la sesión desde el token guardado
+// en sessionStorage. Si el token sigue siendo válido, entra directo
+// al chat. Si no, muestra el formulario de registro.
 
 import { useState, useEffect } from 'react'
 import Registro from './components/Registro'
 import Sidebar from './components/Sidebar'
 import ListaContactos from './components/ListaContactos'
 import Chat from './components/Chat'
-import { listarUsuarios, obtenerIdIA } from './services/api'
+import {
+  listarUsuarios,
+  obtenerIdIA,
+  obtenerUsuarioActual
+} from './services/api'
 
 export default function App() {
-  // Usuario actual registrado en el sistema
   const [usuario, setUsuario] = useState(null)
-  // Lista de todos los contactos disponibles
   const [contactos, setContactos] = useState([])
-  // Contacto actualmente seleccionado para chatear
   const [contactoActivo, setContactoActivo] = useState(null)
-  // ID del nodo IA para identificarlo en la lista de contactos
   const [iaId, setIaId] = useState(null)
+  // Estado para evitar el "flash" del formulario de registro
+  // mientras se verifica el token al cargar la página
+  const [cargandoSesion, setCargandoSesion] = useState(true)
 
-  // Al registrarse, cargar contactos e ID del nodo IA
+  // Al montar el componente: intentar restaurar la sesión
+  // desde el token guardado en sessionStorage
+  useEffect(() => {
+    async function restaurarSesion() {
+      const usuarioRecuperado = await obtenerUsuarioActual()
+      if (usuarioRecuperado) {
+        setUsuario(usuarioRecuperado)
+      }
+      setCargandoSesion(false)
+    }
+    restaurarSesion()
+  }, [])
+
+  // Al tener usuario, cargar contactos e ID del nodo IA
   useEffect(() => {
     if (!usuario) return
 
@@ -30,7 +49,6 @@ export default function App() {
           listarUsuarios(),
           obtenerIdIA()
         ])
-        // Excluir al usuario actual de su propia lista de contactos
         setContactos(usuarios.filter(u => u.id !== usuario.id))
         setIaId(idIA)
       } catch (error) {
@@ -40,23 +58,28 @@ export default function App() {
 
     cargarDatos()
 
-    // Actualizar lista de contactos cada 10 segundos
-    // para mostrar nuevos usuarios que se registren
     const intervalo = setInterval(cargarDatos, 10000)
     return () => clearInterval(intervalo)
   }, [usuario])
 
-  // Mientras no hay usuario registrado mostrar pantalla de registro
+  // Mientras se verifica el token, mostrar pantalla de carga simple
+  if (cargandoSesion) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="text-gray-400 text-sm">Cargando...</div>
+      </div>
+    )
+  }
+
+  // Sin usuario logueado → pantalla de registro
   if (!usuario) {
     return <Registro onRegistro={setUsuario} />
   }
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
-      {/* Sidebar izquierdo con navegación */}
       <Sidebar usuario={usuario} />
 
-      {/* Panel central con lista de contactos */}
       <ListaContactos
         contactos={contactos}
         contactoActivo={contactoActivo}
@@ -65,7 +88,6 @@ export default function App() {
         iaId={iaId}
       />
 
-      {/* Panel derecho con la conversación */}
       {contactoActivo ? (
         <Chat
           usuarioActual={usuario}

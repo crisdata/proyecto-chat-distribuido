@@ -1,6 +1,5 @@
 // services/api.js
 // Centraliza todas las llamadas a la API del backend.
-// Todos los componentes importan desde aquí, nunca hacen fetch directamente.
 
 const BASE_URL = '/api';
 const WS_URL = window.location.protocol === 'https:'
@@ -8,7 +7,6 @@ const WS_URL = window.location.protocol === 'https:'
   : `ws://${window.location.host}/ws`;
 
 // ── Token JWT ─────────────────────────────────────────────────────────────
-// El token se guarda en memoria y en sessionStorage para sobrevivir reloads.
 
 let _token = sessionStorage.getItem('chat_token') || null;
 
@@ -42,7 +40,6 @@ export async function registrarUsuario(nombre) {
     throw new Error(error.detail || 'Error al registrar usuario');
   }
   const data = await res.json();
-  // Guardar el token automáticamente al registrarse
   if (data.token) setToken(data.token);
   return data;
 }
@@ -57,6 +54,28 @@ export async function obtenerIdIA() {
   const usuarios = await listarUsuarios();
   const ia = usuarios.find(u => u.nombre === 'Asistente IA');
   return ia ? ia.id : null;
+}
+
+// Recupera el usuario actual desde el token guardado en sessionStorage.
+// Retorna null si no hay token o si el token es inválido/expiró.
+// El frontend usa esto al cargar la página para restaurar la sesión.
+export async function obtenerUsuarioActual() {
+  if (!_token) return null;
+
+  try {
+    const res = await fetch(`${BASE_URL}/usuarios/me`, {
+      headers: authHeaders()
+    });
+    if (!res.ok) {
+      // Token inválido o expirado — limpiar para forzar nuevo login
+      setToken(null);
+      return null;
+    }
+    return await res.json();
+  } catch {
+    setToken(null);
+    return null;
+  }
 }
 
 // ── Mensajes ──────────────────────────────────────────────────────────────
@@ -118,11 +137,6 @@ export async function estadoIA() {
 
 // ── WebSocket ─────────────────────────────────────────────────────────────
 
-/**
- * Crea y gestiona una conexión WebSocket con reconexión automática.
- * El token JWT se pasa como query parameter porque los WebSockets del
- * navegador no permiten headers personalizados.
- */
 export function crearWebSocket(usuarioId, onMensaje, onEstado) {
   let intentos = 0
   let timeoutId = null
@@ -156,7 +170,6 @@ export function crearWebSocket(usuarioId, onMensaje, onEstado) {
 
     ws.onclose = (evento) => {
       if (cerradoManualmente) return
-      // Si fue cierre por autenticación (4001/4003), no reintentar
       if (evento.code === 4001 || evento.code === 4003) {
         onEstado('desconectado')
         return

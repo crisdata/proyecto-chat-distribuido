@@ -1,6 +1,10 @@
 # queue.py
 # Gestiona la conexión a RabbitMQ y la publicación de eventos.
 # Usa aio-pika para compatibilidad total con asyncio y FastAPI.
+#
+# Cada evento publicado incluye automáticamente el request_id de la
+# petición HTTP en curso, permitiendo trazar el flujo del mensaje a
+# través de la cola hasta el worker.
 
 import logging
 import os
@@ -8,6 +12,8 @@ import json
 
 import aio_pika
 from dotenv import load_dotenv
+
+from app.request_id import get_request_id
 
 load_dotenv()
 
@@ -35,8 +41,6 @@ async def conectar_queue():
     _conexion = await aio_pika.connect_robust(url)
     _canal = await _conexion.channel()
 
-    # Declarar la cola como durable para que sobreviva reinicios
-    # de RabbitMQ sin perder mensajes en tránsito
     await _canal.declare_queue("mensajes", durable=True)
     log.info("Cola 'mensajes' declarada en RabbitMQ")
 
@@ -52,19 +56,27 @@ async def desconectar_queue():
 async def publicar(cola: str, evento: dict):
     """
     Publica un evento JSON en la cola especificada.
+    Inyecta automáticamente el request_id del contexto HTTP actual
+    para que el worker pueda continuar la cadena de trazabilidad.
+
     Si la conexión no está disponible, el error se registra
     pero no interrumpe el flujo principal de la API.
     """
     global _canal
+
+    # Adjuntar el request_id del contexto actual al evento.
+    # Esto permite que el worker lea el ID al consumir y mantenga
+    # la cadena de logs trazable a través de RabbitMQ.
+    evento_con_traza = {**evento, "request_id": get_request_id()}
+
     try:
         await _canal.default_exchange.publish(
             aio_pika.Message(
-                body=json.dumps(evento).encode(),
+                body=json.dumps(evento_con_traza).encode(),
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT
             ),
             routing_key=cola
         )
+        log.info(f"Evento publicado en cola '{cola}'")
     except Exception as e:
-        # RabbitMQ no disponible — el mensaje ya está en MariaDB,
-        # solo se pierde la notificación asíncrona
         log.warning(f"No se pudo publicar evento en cola '{cola}': {e}")

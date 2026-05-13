@@ -6,18 +6,22 @@
 # compartido (WORKER_SECRET) que solo conocen el worker y la API.
 # Cualquier request sin el header X-Worker-Secret correcto recibe 403.
 #
-# El worker no puede acceder directamente al ConnectionManager
-# porque vive en un proceso separado con memoria independiente.
-# En cambio llama a este endpoint para que la API ejecute
-# la notificación WebSocket en su propio proceso.
+# El worker propaga el request_id original via header X-Request-ID,
+# que el middleware HTTP de la API ya está configurado para respetar.
+# Esto cierra el ciclo de trazabilidad: el mismo ID aparece en los
+# logs de la API, RabbitMQ, el worker, y de vuelta en este endpoint.
+
+import logging
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+
 from app.routers.websocket import manager
 from app.cache import incrementar_mensajes_no_leidos
 from app.auth import autenticar_worker
 
 router = APIRouter(prefix="/interno", tags=["Interno"])
+log = logging.getLogger("interno")
 
 
 class EventoMensaje(BaseModel):
@@ -34,17 +38,28 @@ async def notificar_receptor(evento: EventoMensaje):
     via WebSocket si está conectado.
     También incrementa el contador de no leídos en Redis.
 
-    Protegido por la dependencia autenticar_worker, que valida
-    el header X-Worker-Secret antes de ejecutar el endpoint.
+    El request_id propagado por el worker via header X-Request-ID
+    aparece automáticamente en los logs de este endpoint gracias
+    al middleware HTTP, cerrando el ciclo de trazabilidad.
     """
-    # Incrementar contador de no leídos en Redis
+    log.info(
+        f"Notificación recibida del worker: "
+        f"{evento.emisor_nombre} → {evento.receptor_id}"
+    )
+
     await incrementar_mensajes_no_leidos(evento.receptor_id)
 
-    # Notificar al receptor via WebSocket si está conectado
     await manager.notify(evento.receptor_id, {
         "tipo": "nuevo_mensaje",
         "emisor_id": evento.emisor_id,
         "emisor_nombre": evento.emisor_nombre
     })
+
+    # Indica si el receptor estaba conectado por WebSocket en este momento
+    conectado = manager.esta_conectado(evento.receptor_id)
+    log.info(
+        f"Notificación entregada al WebSocket: "
+        f"receptor {'conectado' if conectado else 'offline'}"
+    )
 
     return {"ok": True}
