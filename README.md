@@ -1,4 +1,4 @@
-# Chat Privado Distribuido — Grupo 4
+# Chat Privado Distribuido
 
 Sistema de chat distribuido con comunicación privada entre usuarios,
 inteligencia artificial local y arquitectura completamente contenerizada.
@@ -13,9 +13,9 @@ mensajes privados en tiempo real. Incluye un nodo de inteligencia artificial
 se entregan instantáneamente vía WebSocket y el sistema de notificaciones
 está desacoplado mediante RabbitMQ.
 
-Además, el sistema implementa observabilidad completa: tres paneles web
-permiten ver los logs, las colas de mensajes y la base de datos en caché
-en tiempo real.
+Además, el sistema implementa observabilidad completa: cuatro paneles web
+permiten ver los logs, las colas de mensajes, la base de datos en caché
+y administrar todo el entorno Docker en tiempo real.
 
 ---
 
@@ -30,13 +30,14 @@ en tiempo real.
 - **Tres redes Docker segmentadas** siguiendo OWASP (capa pública, aplicación, datos)
 - **Worker robusto** con reintentos exponenciales ante fallos transitorios
 - **Trazabilidad completa** mediante `request_id` que viaja por todo el sistema
-- **Observabilidad web** con Dozzle, Redis Commander y panel de RabbitMQ
+- **Observabilidad web** con Dozzle, Redis Commander, RabbitMQ y Portainer
+- **Operación simplificada** mediante Makefile con comandos cortos
 
 ---
 
 ## Arquitectura del sistema
 
-El proyecto está compuesto por nueve servicios Docker organizados en tres
+El proyecto está compuesto por diez servicios Docker organizados en tres
 redes aisladas:
 
 ```
@@ -48,6 +49,11 @@ redes aisladas:
 │  │  :80     │ WS │  :8000   │    │  :9999  │    │  Commander   │ │
 │  │(Frontend)│    │(chat_api)│    │ (logs)  │    │    :8081     │ │
 │  └──────────┘    └────┬─────┘    └─────────┘    └──────┬───────┘ │
+│                       │                                  │         │
+│  ┌────────────┐       │                                  │         │
+│  │ Portainer  │       │                                  │         │
+│  │   :9000    │       │                                  │         │
+│  └────────────┘       │                                  │         │
 └──────────────────────┬┴────────────────────────────────┬─────────┘
                        │                                  │
          ┌─────────────┼──────────────┐                  │
@@ -81,6 +87,7 @@ redes aisladas:
 | Worker | Python asyncio + aio-pika | app + data | Procesa notificaciones |
 | Dozzle | amir20/dozzle | (socket Docker) | Visualizador web de logs |
 | Redis Commander | rediscommander/redis-commander | public + data | Explorador web de Redis |
+| Portainer | portainer/portainer-ce | (socket Docker) | Administrador web de Docker |
 
 ### Segmentación de redes
 
@@ -103,6 +110,7 @@ Antes de instalar el proyecto, asegúrate de tener lo siguiente en tu computador
 - **4 GB de RAM libre** (el modelo de IA ocupa ~2 GB)
 - **Conexión a internet** para la primera instalación
 - **Git** para clonar el repositorio
+- **Make** para usar los comandos abreviados (opcional pero recomendado)
 
 ### Notas específicas por sistema operativo
 
@@ -110,9 +118,11 @@ Antes de instalar el proyecto, asegúrate de tener lo siguiente en tu computador
 - Docker Desktop debe estar abierto y funcionando antes de cualquier comando
 - Usa WSL2 (Subsistema de Windows para Linux) como terminal
 - Los comandos NO se ejecutan en PowerShell ni en CMD, siempre en una terminal Ubuntu/WSL
+- Instala `make` con: `sudo apt install make`
 
 **Usuarios de Mac y Linux:**
 - Cualquier terminal estándar funciona
+- `make` viene preinstalado en la mayoría de distribuciones Linux
 
 ---
 
@@ -164,7 +174,15 @@ WORKER_SECRET=p7Qw_xYz1aBcDe2FgHiJkLm3NoPqRsTuVw4...
 
 ### Paso 3 — Levantar los servicios
 
-Construye y arranca todos los contenedores:
+Construye y arranca todos los contenedores. Tienes dos opciones equivalentes:
+
+**Opción recomendada — con Makefile:**
+
+```bash
+make up
+```
+
+**Opción alternativa — con Docker Compose directamente:**
 
 ```bash
 docker compose up --build -d
@@ -173,19 +191,29 @@ docker compose up --build -d
 La primera ejecución tarda varios minutos porque descarga imágenes y
 construye el frontend. Verás muchas líneas en la terminal — es normal.
 
+Al finalizar, `make up` imprime un resumen con las URLs de todos los servicios
+disponibles.
+
 ### Paso 4 — Verificar que todo está funcionando
 
 Espera unos 30 segundos para que todos los servicios pasen sus chequeos
 de salud. Luego ejecuta:
 
 ```bash
+make ps
+```
+
+O alternativamente:
+
+```bash
 docker ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
-Deberías ver los 9 contenedores en estado `Up`:
+Deberías ver los 10 contenedores en estado `Up`:
 
 ```
 NAMES                  STATUS
+chat_portainer         Up X seconds
 chat_frontend          Up X seconds
 chat_redis_commander   Up X seconds
 chat_dozzle            Up X seconds
@@ -206,23 +234,25 @@ en un volumen Docker y sobrevive a reinicios.
 > que no tiene acceso a internet por diseño de seguridad. Para descargar el modelo
 > debemos conectarlo temporalmente a la red pública, descargar, y volver a aislarlo.
 
-Ejecuta estos comandos en orden:
+**Opción recomendada — con Makefile (automatiza todo el procedimiento):**
 
 ```bash
-# 1. Conectar Ollama temporalmente a la red con internet
+make pull-model
+```
+
+Este comando conecta Ollama a la red pública, descarga el modelo, lo desconecta
+y muestra la lista de modelos disponibles para confirmar. Todo en un solo paso.
+
+**Opción alternativa — manualmente:**
+
+```bash
 docker network connect proyecto1_public_network chat_ollama
-
-# 2. Descargar el modelo (tarda varios minutos, son ~2 GB)
 docker exec -it chat_ollama ollama pull llama3.2:3b
-
-# 3. Desconectar Ollama de la red pública (volver al aislamiento)
 docker network disconnect proyecto1_public_network chat_ollama
-
-# 4. Verificar que el modelo está disponible
 docker exec chat_ollama ollama list
 ```
 
-Deberías ver una línea con el modelo descargado:
+Al terminar deberías ver una línea con el modelo descargado:
 
 ```
 NAME            ID              SIZE      MODIFIED
@@ -245,7 +275,7 @@ usuario aparecer en la lista de contactos automáticamente.
 
 ## Herramientas de observabilidad
 
-El sistema viene con tres paneles web que permiten ver lo que pasa por dentro
+El sistema viene con cuatro paneles web que permiten ver lo que pasa por dentro
 en tiempo real. No requieren instalación adicional, ya están corriendo.
 
 ### Dozzle — Logs unificados
@@ -293,6 +323,30 @@ Muestra las colas, conexiones, consumidores y tráfico de mensajes.
 **Sección útil:** pestaña **Queues** → click en `mensajes` para ver el tráfico
 de notificaciones del chat en tiempo real.
 
+### Portainer — Administrador web de Docker
+
+**URL:** http://localhost:9000
+
+Interfaz web completa para administrar todo el entorno Docker desde el navegador.
+Mientras Dozzle se enfoca solo en logs, Portainer ofrece una visión integral
+del sistema y permite ejecutar acciones administrativas sin terminal.
+
+**Funciones útiles:**
+- Ver los 10 contenedores con su estado, CPU y memoria en tiempo real
+- Reiniciar, detener o iniciar contenedores con un clic
+- Inspeccionar imágenes, volúmenes y redes Docker
+- Ver el stack `proyecto1` como una unidad lógica
+- Detectar automáticamente contenedores caídos o con problemas
+
+**Primer ingreso:** Portainer pedirá crear un usuario administrador con
+contraseña de mínimo 12 caracteres. Luego selecciona el entorno **"Local"**
+para administrar el Docker del host.
+
+**Caso de uso:** para demostrar resiliencia del sistema, entra a la sección
+**Containers**, selecciona el contenedor `chat_worker`, click en **Restart**,
+y observa cómo se reconecta automáticamente a RabbitMQ sin afectar al resto
+de servicios.
+
 ---
 
 ## Cómo usar la trazabilidad con request_id
@@ -320,56 +374,78 @@ Esto permite seguir un mensaje desde que entra hasta que se entrega.
 
 ## Comandos útiles del día a día
 
-### Ver el estado de todos los contenedores
+El proyecto incluye un **Makefile** que define atajos para las operaciones
+más frecuentes. Es la forma recomendada de operar el sistema porque evita
+escribir comandos largos y reduce errores de tipeo.
+
+Para ver todos los comandos disponibles con su descripción:
 
 ```bash
+make help
+```
+
+### Comandos principales
+
+| Comando | Qué hace | Equivalente Docker |
+|---|---|---|
+| `make up` | Construye y arranca todo el sistema en segundo plano | `docker compose up --build -d` |
+| `make down` | Detiene todos los servicios conservando datos | `docker compose down` |
+| `make restart` | Reinicia todos los servicios (down + up) | `docker compose down && up --build -d` |
+| `make logs` | Muestra los logs de todos los servicios en vivo | `docker compose logs -f` |
+| `make ps` | Muestra el estado de los contenedores | `docker ps` |
+| `make status` | Alias de `make ps` | — |
+
+### Comandos avanzados
+
+| Comando | Qué hace | Cuándo usarlo |
+|---|---|---|
+| `make build` | Reconstruye las imágenes sin levantar los contenedores | Tras cambios sin querer arrancar |
+| `make pull-model` | Descarga el modelo Ollama automáticamente | Instalación inicial o tras `make clean` |
+| `make reset-db` | Limpia mensajes y usuarios para una demo | Antes de presentar |
+| `make clean` | Detiene los servicios y borra TODOS los datos persistentes | Solo para resetear el proyecto de cero |
+
+### Comandos de mantenimiento
+
+| Comando | Qué hace | Cuándo usarlo |
+|---|---|---|
+| `make disk` | Muestra el uso de disco de Docker | Para diagnosticar acumulación de basura |
+| `make prune` | Limpia build cache y volúmenes huérfanos | Mantenimiento semanal |
+| `make prune-all` | Limpieza profunda con confirmación | Antes de entregas o instalaciones limpias |
+
+> ⚠️ **Importante:** `make clean` borra los volúmenes con datos persistentes
+> (BD, modelo IA, configuración de Portainer). Tras ejecutarlo deberás repetir
+> el Paso 5 de la instalación para volver a descargar el modelo. Los comandos
+> `prune` y `prune-all` son seguros y nunca tocan datos en uso.
+
+### Comandos manuales sin Makefile
+
+Si por alguna razón no puedes usar `make`, todos los comandos tienen su
+equivalente directo con Docker Compose:
+
+```bash
+# Ver estado
 docker ps --format "table {{.Names}}\t{{.Status}}"
-```
 
-### Ver logs en vivo de un contenedor específico
-
-```bash
+# Ver logs en vivo de un contenedor específico
 docker logs chat_api -f
-```
 
-Sale con `Ctrl+C`. También puedes ver los logs en Dozzle directamente.
-
-### Reiniciar un servicio sin tocar los demás
-
-```bash
+# Reiniciar un servicio sin tocar los demás
 docker compose restart api
-```
 
-### Apagar todos los servicios conservando los datos
-
-```bash
+# Apagar todos los servicios conservando los datos
 docker compose down
-```
 
-### Apagar y borrar TODO (mensajes, usuarios, modelo de IA)
-
-```bash
+# Apagar y borrar TODO (mensajes, usuarios, modelo de IA)
 docker compose down -v
-```
 
-> ⚠️ Esto borra los volúmenes. La próxima vez que arranques tendrás que
-> volver a descargar el modelo de IA siguiendo el Paso 5.
-
-### Limpiar mensajes para una demo
-
-```bash
+# Limpiar mensajes para una demo
 docker exec -it chat_db mariadb -u chat_user -pchat1234 chat_db \
   -e "DELETE FROM mensajes; DELETE FROM usuarios;"
 docker compose restart api
-```
 
-### Reconstruir un servicio después de cambiar código
-
-```bash
+# Reconstruir un servicio después de cambiar código
 docker compose up --build -d api
 ```
-
-Cambia `api` por el nombre del servicio que modificaste.
 
 ---
 
@@ -405,12 +481,13 @@ Verifica que el modelo está descargado:
 docker exec chat_ollama ollama list
 ```
 
-Si la lista está vacía, repite el Paso 5 de la instalación.
+Si la lista está vacía, repite el Paso 5 de la instalación con `make pull-model`.
 
 ### "Error al descargar el modelo: server misbehaving"
 
 Es un problema de DNS. Asegúrate de haber conectado Ollama temporalmente
-a la red pública antes de hacer el `pull`. Sigue el Paso 5 al pie de la letra.
+a la red pública antes de hacer el `pull`. El comando `make pull-model`
+hace esto automáticamente.
 
 ### La API se reinicia en bucle al levantar
 
@@ -434,6 +511,36 @@ y recarga con `Ctrl+Shift+R`. Si persiste, reconstruye sin caché:
 ```bash
 docker compose build --no-cache frontend
 docker compose up -d --force-recreate frontend
+```
+
+### Disco Docker lleno o muy grande
+
+Tras varias iteraciones de desarrollo, el caché de Docker puede crecer
+significativamente. Ejecuta:
+
+```bash
+make disk        # ver cuánto ocupa
+make prune       # limpiar build cache y volúmenes huérfanos
+```
+
+Para una limpieza más profunda (antes de una entrega):
+
+```bash
+make prune-all
+```
+
+### "make: command not found"
+
+`make` no está instalado. En Ubuntu o WSL2:
+
+```bash
+sudo apt update && sudo apt install make
+```
+
+En Mac:
+
+```bash
+xcode-select --install
 ```
 
 ---
@@ -489,6 +596,7 @@ proyecto-chat-distribuido/
 ├── docker-compose.yml          # Orquestación de servicios y redes
 ├── Dockerfile                  # Imagen del backend Python
 ├── Dockerfile.worker           # Imagen del worker RabbitMQ
+├── Makefile                    # Atajos para operación y mantenimiento
 ├── requirements.txt            # Dependencias Python
 └── .env.example                # Variables de entorno de referencia
 ```
@@ -568,11 +676,13 @@ El proyecto cubre varios conceptos clave de sistemas distribuidos:
 - **Segmentación de redes por capas** — tres redes Docker con aislamiento
   progresivo siguiendo las recomendaciones OWASP.
 
+- **Orquestación con un solo comando** — el sistema completo (10 servicios,
+  3 redes, 4 volúmenes) se levanta con `make up`, demostrando los principios
+  de Infrastructure as Code.
+
 ---
 
 ## Créditos
 
-Proyecto desarrollado por el **Grupo 4** para el curso de **Programación
-Distribuida** del programa de **Ingeniería de Sistemas** de **COTECNOVA**.
-
-Profesor: Jhon James Cano Sánchez
+Proyecto desarrollado para el curso de **Programación
+Distribuida** del programa de **Ingeniería de Sistemas**.

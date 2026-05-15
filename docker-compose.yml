@@ -176,11 +176,28 @@ services:
       - public_network
       - data_network
 
+  # ── Portainer — Administrador web de Docker ──────────────────────────
+  # Interfaz web completa para gestionar el entorno Docker.
+  # Disponible en http://localhost:9000.
+  # Permite ver contenedores, redes, volumenes, imagenes y uso de recursos,
+  # ademas de reiniciar contenedores y ver logs sin terminal.
+  # Lee el socket de Docker para administrar todo el host (igual que Dozzle).
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: chat_portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
 # ── Volúmenes persistentes ────────────────────────────────────────────
 volumes:
   db_data:
   ollama_data:
   rabbitmq_data:
+  portainer_data:
 
 # ── Redes segmentadas por capa ────────────────────────────────────────
 networks:
