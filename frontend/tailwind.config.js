@@ -7,33 +7,68 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Paleta del diseño de referencia
-        primary: {
-          50:  '#f0fdf9',
-          100: '#ccfbef',
-          400: '#34d399',
-          500: '#10b981',
-          600: '#059669',
-          700: '#047857',
+        // ─── Paleta Vibe — Privacy First ────────────────────────────────
+        // Fondos escalonados: del más oscuro (vibe-950) al menos oscuro (vibe-700)
+        // crean profundidad visual sin perder el carácter oscuro del producto.
+        vibe: {
+          950: '#0a0e1a',   // Fondo principal (chat, sidebar)
+          900: '#0d1322',   // Fondo intermedio (lista de contactos)
+          800: '#131a2c',   // Inputs, búsqueda
+          700: '#1e293b',   // Burbujas recibidas
+          600: '#334155',   // Bordes sutiles
+          500: '#64748b',   // Texto secundario
+          400: '#94a3b8',   // Texto medio
+          300: '#cbd5e1',   // Texto principal en superficies
+          200: '#e2e8f0',   // Texto principal en fondos oscuros
+          100: '#f1f5f9',   // Texto destacado
         },
-        chat: {
-          bg:       '#f0f2f5',
-          panel:    '#ffffff',
-          sidebar:  '#ffffff',
-          sent:     '#dcf8c6',
-          received: '#ffffff',
-          ia:       '#e8f5f0',
-          header:   '#ffffff',
-          input:    '#f0f2f5',
-        }
+        // Cian eléctrico — color de acento principal (acciones, seguridad)
+        cyan: {
+          400: '#22d3ee',
+          500: '#06b6d4',   // El cian "marca" de Vibe
+          600: '#0891b2',
+        },
+        // Azul para gradientes en burbujas enviadas
+        blue: {
+          600: '#2563eb',
+          700: '#1e40af',
+        },
+        // Púrpura — color exclusivo de Lumi (lo usamos en B3)
+        lumi: {
+          400: '#a855f7',
+          500: '#9333ea',
+          600: '#7e22ce',
+        },
+        // Verde para "en línea" (lo usamos en B4)
+        online: {
+          400: '#22c55e',
+          500: '#16a34a',
+        },
+      },
+      // Gradientes pre-definidos para uso fácil con clase `bg-gradient-...`
+      backgroundImage: {
+        'gradient-vibe': 'linear-gradient(135deg, #1e40af 0%, #06b6d4 100%)',
+        'gradient-lumi': 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
       },
       fontFamily: {
         sans: ['Inter', 'Segoe UI', 'system-ui', 'sans-serif'],
       },
+      // Sombras suaves para burbujas y paneles
       boxShadow: {
-        'message': '0 1px 2px rgba(0,0,0,0.08)',
-        'panel': '0 1px 3px rgba(0,0,0,0.1)',
-      }
+        'bubble': '0 1px 3px rgba(0,0,0,0.3)',
+        'panel': '0 4px 12px rgba(0,0,0,0.4)',
+        'glow-cyan': '0 0 20px rgba(6,182,212,0.3)',
+      },
+      // Animaciones para mensajes que aparecen
+      animation: {
+        'fade-in-up': 'fadeInUp 0.3s ease-out',
+      },
+      keyframes: {
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
     },
   },
   plugins: [],
