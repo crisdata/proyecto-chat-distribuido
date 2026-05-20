@@ -1,10 +1,10 @@
 // ListaContactos.jsx
-// Panel central con la lista de contactos disponibles.
-// Tema oscuro Vibe. Resaltado especial para la IA con tinte púrpura.
+// Panel central con la lista de contactos. Cada avatar tiene gradiente único.
 
 import { useState, useEffect } from 'react'
 import { Search, Bot, User, PenSquare } from 'lucide-react'
 import { obtenerNoLeidos, formatearHora } from '../services/api'
+import { getAvatarStyle } from '../utils/avatarColors'
 
 export default function ListaContactos({
   contactos,
@@ -16,7 +16,6 @@ export default function ListaContactos({
   const [busqueda, setBusqueda] = useState('')
   const [noLeidos, setNoLeidos] = useState(0)
 
-  // Consultar mensajes no leídos del usuario actual cada 3 segundos
   useEffect(() => {
     if (!usuarioActual?.id) return
 
@@ -41,7 +40,6 @@ export default function ListaContactos({
   return (
     <div className="w-80 bg-vibe-900 border-r border-vibe-800 flex flex-col">
 
-      {/* Encabezado */}
       <div className="px-5 pt-6 pb-4 border-b border-vibe-800">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-vibe-100">
@@ -55,7 +53,6 @@ export default function ListaContactos({
           )}
         </div>
 
-        {/* Buscador */}
         <div className="flex items-center gap-2 bg-vibe-800 rounded-xl
                         px-3 py-2.5 border border-vibe-700
                         focus-within:border-cyan-500 transition">
@@ -71,7 +68,6 @@ export default function ListaContactos({
         </div>
       </div>
 
-      {/* Lista de contactos */}
       <div className="flex-1 overflow-y-auto py-2">
         {contactosFiltrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center
@@ -97,20 +93,19 @@ export default function ListaContactos({
                               : 'hover:bg-vibe-800/50'
                             }`}
               >
-                {/* Avatar — sólido por ahora, gradientes únicos en B2 */}
-                <div className={`w-11 h-11 rounded-full flex items-center
-                                 justify-center flex-shrink-0 text-white
-                                 font-semibold
-                                 ${esIA
-                                   ? 'bg-gradient-lumi'
-                                   : 'bg-gradient-vibe'}`}>
+                {/* Avatar con gradiente único por contacto */}
+                <div
+                  style={getAvatarStyle(contacto.nombre, esIA)}
+                  className={`w-11 h-11 rounded-full flex items-center
+                              justify-center flex-shrink-0 font-semibold
+                              ${esIA ? 'text-white' : ''}`}
+                >
                   {esIA
                     ? <Bot size={20} />
                     : contacto.nombre.charAt(0).toUpperCase()
                   }
                 </div>
 
-                {/* Información del contacto */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <span className={`text-sm font-medium truncate
@@ -139,7 +134,6 @@ export default function ListaContactos({
         )}
       </div>
 
-      {/* Botón nuevo chat — desactivado visualmente porque aún no funciona */}
       <div className="p-4 border-t border-vibe-800">
         <button className="w-full py-3 rounded-xl bg-gradient-vibe
                            text-white text-sm font-semibold transition

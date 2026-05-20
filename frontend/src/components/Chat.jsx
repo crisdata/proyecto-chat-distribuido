@@ -1,6 +1,5 @@
 // Chat.jsx
-// Panel derecho con la conversación activa entre dos usuarios.
-// Tema oscuro Vibe. Tinte púrpura cuando el contacto es la IA.
+// Panel derecho con la conversación. Avatar del contacto con gradiente único.
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Send, Bot, User, Loader, Wifi, WifiOff, Shield, Flame } from 'lucide-react'
@@ -11,6 +10,7 @@ import {
   esHoy,
   crearWebSocket
 } from '../services/api'
+import { getAvatarStyle } from '../utils/avatarColors'
 
 const BASE_URL = '/api'
 
@@ -88,7 +88,6 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
     }
   }
 
-  // Agrupar mensajes por fecha
   function renderMensajes() {
     let fechaAnterior = null
     return mensajes.map((mensaje, index) => {
@@ -119,7 +118,6 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
     })
   }
 
-  // Indicador de estado WebSocket
   const indicadorWS = {
     conectado: {
       icono: <Wifi size={14} />,
@@ -148,9 +146,13 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
       {/* Encabezado de la conversación */}
       <div className="bg-vibe-950 border-b border-vibe-800 px-6 py-4
                       flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center
-                         text-white font-semibold flex-shrink-0
-                         ${esIA ? 'bg-gradient-lumi' : 'bg-gradient-vibe'}`}>
+        {/* Avatar del contacto con gradiente único */}
+        <div
+          style={getAvatarStyle(contacto.nombre, esIA)}
+          className={`w-10 h-10 rounded-full flex items-center justify-center
+                      font-semibold flex-shrink-0
+                      ${esIA ? 'text-white' : ''}`}
+        >
           {esIA
             ? <Bot size={20} />
             : contacto.nombre.charAt(0).toUpperCase()
@@ -172,7 +174,6 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
             </div>
           )}
         </div>
-        {/* Ícono de privacidad (decorativo, refuerza la identidad) */}
         <Shield size={18} className="text-cyan-500" />
       </div>
 
@@ -208,7 +209,6 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
           renderMensajes()
         )}
 
-        {/* Indicador de escritura cuando la IA está procesando */}
         {enviando && esIA && (
           <div className="flex items-center gap-2 mt-2 text-vibe-500 text-xs">
             <Loader size={14} className="animate-spin text-lumi-400" />
@@ -221,7 +221,6 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
       {/* Input de mensaje */}
       <div className="bg-vibe-950 border-t border-vibe-800 px-4 py-3
                       flex items-end gap-3">
-        {/* Ícono de mensaje autodestructivo — funcionalidad en Sprint 3 */}
         <button
           title="Mensaje autodestructivo (próximamente)"
           disabled

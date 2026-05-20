@@ -1,10 +1,10 @@
 // Sidebar.jsx
 // Panel izquierdo con navegación principal de Vibe.
-// Estructura: Logo → Chats → Lumi (acceso rápido) → Configuración → Avatar
-// Tema oscuro Privacy First con acentos cian (acciones) y púrpura (Lumi).
+// Avatar del usuario actual con gradiente único generado por hash del nombre.
 
 import { useState, useRef, useEffect } from 'react'
 import { MessageCircle, Sparkles, Settings, LogOut } from 'lucide-react'
+import { getAvatarStyle } from '../utils/avatarColors'
 
 export default function Sidebar({
   usuario,
@@ -13,14 +13,11 @@ export default function Sidebar({
   onSeleccionar,
   onLogout
 }) {
-  // Estado del menú de configuración (abierto/cerrado)
   const [menuAbierto, setMenuAbierto] = useState(false)
   const menuRef = useRef(null)
 
-  // Encuentra a Lumi en la lista de contactos para poder seleccionarla
   const lumi = contactos.find(c => c.id === iaId)
 
-  // Cierra el menú al hacer click fuera
   useEffect(() => {
     function handleClickFuera(e) {
       if (menuRef.current && !menuRef.current.contains(e.target)) {
@@ -52,13 +49,11 @@ export default function Sidebar({
         <MessageCircle size={22} className="text-white" />
       </div>
 
-      {/* Separador */}
       <div className="w-8 h-px bg-vibe-800" />
 
-      {/* Navegación */}
       <nav className="flex flex-col items-center gap-3 flex-1">
 
-        {/* Chats — activo siempre por ahora (única vista del sistema) */}
+        {/* Chats */}
         <button
           title="Chats"
           className="w-11 h-11 rounded-xl bg-cyan-500/15 text-cyan-400
@@ -68,7 +63,7 @@ export default function Sidebar({
           <MessageCircle size={20} />
         </button>
 
-        {/* Lumi — acceso rápido a la IA */}
+        {/* Lumi */}
         <button
           onClick={abrirLumi}
           disabled={!lumi}
@@ -83,7 +78,7 @@ export default function Sidebar({
 
       </nav>
 
-      {/* Configuración con menú flotante */}
+      {/* Configuración */}
       <div className="relative" ref={menuRef}>
         <button
           onClick={() => setMenuAbierto(!menuAbierto)}
@@ -96,13 +91,11 @@ export default function Sidebar({
           <Settings size={20} />
         </button>
 
-        {/* Popup del menú de configuración */}
         {menuAbierto && (
           <div className="absolute left-full ml-3 bottom-0
                           bg-vibe-900 border border-vibe-700 rounded-xl
                           shadow-panel p-4 w-56 z-50 animate-fade-in-up">
 
-            {/* Info del usuario */}
             <div className="pb-3 mb-3 border-b border-vibe-800">
               <p className="text-xs text-vibe-500 mb-1">Sesión actual</p>
               <p className="text-sm font-medium text-vibe-100 truncate">
@@ -110,7 +103,6 @@ export default function Sidebar({
               </p>
             </div>
 
-            {/* Botón cerrar sesión */}
             <button
               onClick={confirmarLogout}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg
@@ -123,12 +115,12 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* Avatar del usuario actual (gradiente único viene en B2) */}
+      {/* Avatar del usuario actual — ahora con gradiente único */}
       <div
         title={usuario?.nombre}
-        className="w-11 h-11 rounded-full bg-gradient-vibe flex items-center
-                   justify-center text-white font-semibold text-base
-                   cursor-default select-none"
+        style={getAvatarStyle(usuario?.nombre)}
+        className="w-11 h-11 rounded-full flex items-center justify-center
+                   font-semibold text-base cursor-default select-none"
       >
         {usuario?.nombre?.charAt(0).toUpperCase()}
       </div>
