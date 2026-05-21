@@ -52,7 +52,11 @@ export async function listarUsuarios() {
 
 export async function obtenerIdIA() {
   const usuarios = await listarUsuarios();
-  const ia = usuarios.find(u => u.nombre === 'Asistente IA');
+  // Buscamos por "Lumi" (nombre actual) o "Asistente IA" (compatibilidad)
+  // por si algún despliegue antiguo aún no se ha migrado.
+  const ia = usuarios.find(u =>
+    u.nombre === 'Lumi' || u.nombre === 'Asistente IA'
+  );
   return ia ? ia.id : null;
 }
 

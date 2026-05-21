@@ -1,7 +1,10 @@
 // ListaContactos.jsx
-// Panel central con la lista de contactos. Cada avatar tiene gradiente único.
+// Panel central con la lista de contactos.
+// Lumi (la IA) aparece siempre al inicio, separada visualmente del resto
+// por una línea sutil para reforzar su identidad de "compañera virtual"
+// sin romper el minimalismo de la interfaz.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Search, Bot, User, PenSquare } from 'lucide-react'
 import { obtenerNoLeidos, formatearHora } from '../services/api'
 import { getAvatarStyle } from '../utils/avatarColors'
@@ -33,9 +36,78 @@ export default function ListaContactos({
     return () => clearInterval(intervalo)
   }, [usuarioActual?.id])
 
-  const contactosFiltrados = contactos.filter(c =>
-    c.nombre.toLowerCase().includes(busqueda.toLowerCase())
-  )
+  // Separamos a Lumi del resto y los humanos los aplicamos al filtro de búsqueda.
+  // Lumi siempre aparece arriba (también respeta la búsqueda).
+  const { lumi, humanos } = useMemo(() => {
+    const filtroBusqueda = c =>
+      c.nombre.toLowerCase().includes(busqueda.toLowerCase())
+
+    const lumi = contactos.find(c => c.id === iaId)
+    const humanos = contactos
+      .filter(c => c.id !== iaId)
+      .filter(filtroBusqueda)
+
+    return {
+      lumi: lumi && filtroBusqueda(lumi) ? lumi : null,
+      humanos
+    }
+  }, [contactos, iaId, busqueda])
+
+  // Renderiza un item de contacto (reutilizable para Lumi y humanos)
+  function renderContacto(contacto) {
+    const esIA = contacto.id === iaId
+    const activo = contactoActivo?.id === contacto.id
+
+    return (
+      <button
+        key={contacto.id}
+        onClick={() => onSeleccionar(contacto)}
+        className={`w-full flex items-center gap-3 px-4 py-3
+                    transition text-left border-b border-vibe-800/50
+                    ${activo
+                      ? esIA
+                        ? 'bg-lumi-400/10 border-l-4 border-l-lumi-400'
+                        : 'bg-cyan-500/10 border-l-4 border-l-cyan-500'
+                      : 'hover:bg-vibe-800/50'
+                    }`}
+      >
+        <div
+          style={getAvatarStyle(contacto.nombre, esIA)}
+          className={`w-11 h-11 rounded-full flex items-center
+                      justify-center flex-shrink-0 font-semibold
+                      ${esIA ? 'text-white' : ''}`}
+        >
+          {esIA
+            ? <Bot size={20} />
+            : contacto.nombre.charAt(0).toUpperCase()
+          }
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <span className={`text-sm font-medium truncate
+                              ${activo
+                                ? esIA ? 'text-lumi-400' : 'text-cyan-400'
+                                : 'text-vibe-200'
+                              }`}>
+              {contacto.nombre}
+            </span>
+            {contacto.creado_en && (
+              <span className="text-xs text-vibe-600 flex-shrink-0 ml-2">
+                {formatearHora(contacto.creado_en)}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-vibe-500 truncate mt-0.5">
+            {esIA
+              ? 'Tu compañera virtual'
+              : 'Usuario registrado'
+            }
+          </p>
+        </div>
+      </button>
+    )
+  }
 
   return (
     <div className="w-80 bg-vibe-900 border-r border-vibe-800 flex flex-col">
@@ -69,69 +141,28 @@ export default function ListaContactos({
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
-        {contactosFiltrados.length === 0 ? (
+
+        {/* Lumi anclada arriba con separación sutil */}
+        {lumi && (
+          <>
+            {renderContacto(lumi)}
+            {/* Separador visual más prominente para marcar la división
+                entre Lumi (compañera virtual) y los contactos humanos */}
+            <div className="my-2 mx-4 h-px bg-vibe-700/60" />
+          </>
+        )}
+
+        {/* Resto de contactos humanos */}
+        {humanos.length === 0 && !lumi ? (
           <div className="flex flex-col items-center justify-center
                           h-40 text-vibe-500 text-sm gap-2">
             <User size={32} className="opacity-30" />
             <p>No hay contactos disponibles</p>
           </div>
         ) : (
-          contactosFiltrados.map(contacto => {
-            const esIA = contacto.id === iaId
-            const activo = contactoActivo?.id === contacto.id
-
-            return (
-              <button
-                key={contacto.id}
-                onClick={() => onSeleccionar(contacto)}
-                className={`w-full flex items-center gap-3 px-4 py-3
-                            transition text-left border-b border-vibe-800/50
-                            ${activo
-                              ? esIA
-                                ? 'bg-lumi-400/10 border-l-4 border-l-lumi-400'
-                                : 'bg-cyan-500/10 border-l-4 border-l-cyan-500'
-                              : 'hover:bg-vibe-800/50'
-                            }`}
-              >
-                {/* Avatar con gradiente único por contacto */}
-                <div
-                  style={getAvatarStyle(contacto.nombre, esIA)}
-                  className={`w-11 h-11 rounded-full flex items-center
-                              justify-center flex-shrink-0 font-semibold
-                              ${esIA ? 'text-white' : ''}`}
-                >
-                  {esIA
-                    ? <Bot size={20} />
-                    : contacto.nombre.charAt(0).toUpperCase()
-                  }
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className={`text-sm font-medium truncate
-                                      ${activo
-                                        ? esIA ? 'text-lumi-400' : 'text-cyan-400'
-                                        : 'text-vibe-200'
-                                      }`}>
-                      {contacto.nombre}
-                    </span>
-                    {contacto.creado_en && (
-                      <span className="text-xs text-vibe-600 flex-shrink-0 ml-2">
-                        {formatearHora(contacto.creado_en)}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-vibe-500 truncate mt-0.5">
-                    {esIA
-                      ? 'Asistente de inteligencia artificial'
-                      : 'Usuario registrado'
-                    }
-                  </p>
-                </div>
-              </button>
-            )
-          })
+          humanos.map(renderContacto)
         )}
+
       </div>
 
       <div className="p-4 border-t border-vibe-800">
