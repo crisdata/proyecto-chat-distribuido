@@ -20,8 +20,9 @@ from app.models import (
 from app.database import get_connection, release_connection
 from app.cache import (
     obtener_usuario_cache, cachear_usuario,
-    resetear_mensajes_no_leidos,
-    obtener_mensajes_no_leidos
+    obtener_no_leidos_por_contacto,
+    resetear_no_leidos_con,
+    resetear_todos_no_leidos
 )
 from app.queue import publicar
 from app.routers.websocket import manager
@@ -150,7 +151,7 @@ async def consultar_conversacion(usuario_id: str):
             )
             mensajes = await cursor.fetchall()
 
-        await resetear_mensajes_no_leidos(usuario_id)
+        await resetear_todos_no_leidos(usuario_id)
 
         return [
             {
@@ -173,9 +174,19 @@ async def consultar_conversacion(usuario_id: str):
 )
 async def mensajes_no_leidos(usuario_id: str):
     """
-    Retorna el número de mensajes no leídos de un usuario.
-    El frontend usa este endpoint para mostrar el indicador
-    de notificación en la lista de contactos.
+    Retorna el total de mensajes no leídos del usuario, junto con
+    el desglose por contacto. El frontend usa el total para el
+    badge global y el desglose para los badges individuales en la lista.
+
+    Estructura:
+      {
+        "usuario_id": "...",
+        "no_leidos": 5,
+        "por_contacto": {
+          "carlos_uuid": 3,
+          "cristian_uuid": 2
+        }
+      }
     """
     conn = await get_connection()
     try:
@@ -186,11 +197,33 @@ async def mensajes_no_leidos(usuario_id: str):
                 detail="El usuario no existe. Verifica el usuario_id."
             )
 
-        cantidad = await obtener_mensajes_no_leidos(usuario_id)
-        return {"usuario_id": usuario_id, "no_leidos": cantidad}
+        por_contacto = await obtener_no_leidos_por_contacto(usuario_id)
+        total = sum(por_contacto.values())
+
+        return {
+            "usuario_id": usuario_id,
+            "no_leidos": total,
+            "por_contacto": por_contacto
+        }
 
     finally:
         await release_connection(conn)
+
+
+@router.delete(
+    "/no_leidos/{usuario_id}/{contacto_id}",
+    status_code=204
+)
+async def marcar_como_leidos(usuario_id: str, contacto_id: str):
+    """
+    Borra el contador de mensajes no leídos que el usuario tenía
+    con un contacto específico. Se llama cuando el usuario abre
+    el chat con ese contacto.
+
+    Retorna 204 No Content si tuvo éxito (sin body).
+    """
+    await resetear_no_leidos_con(usuario_id, contacto_id)
+    return None
 
 
 @router.get(

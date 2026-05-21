@@ -58,6 +58,7 @@ export default {
         'bubble': '0 1px 3px rgba(0,0,0,0.3)',
         'panel': '0 4px 12px rgba(0,0,0,0.4)',
         'glow-cyan': '0 0 20px rgba(6,182,212,0.3)',
+        'glow-online': '0 0 6px rgba(52, 211, 153, 0.6)',
       },
       // Animaciones para mensajes que aparecen
       animation: {

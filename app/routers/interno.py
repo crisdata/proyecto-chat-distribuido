@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.routers.websocket import manager
-from app.cache import incrementar_mensajes_no_leidos
+from app.cache import incrementar_no_leidos_de
 from app.auth import autenticar_worker
 
 router = APIRouter(prefix="/interno", tags=["Interno"])
@@ -36,7 +36,9 @@ async def notificar_receptor(evento: EventoMensaje):
     """
     Recibe una notificación del worker y la reenvía al receptor
     via WebSocket si está conectado.
-    También incrementa el contador de no leídos en Redis.
+    Incrementa el contador específico de no leídos entre el receptor
+    y el emisor, para que el frontend pueda mostrar un badge individual
+    por contacto.
 
     El request_id propagado por el worker via header X-Request-ID
     aparece automáticamente en los logs de este endpoint gracias
@@ -47,15 +49,20 @@ async def notificar_receptor(evento: EventoMensaje):
         f"{evento.emisor_nombre} → {evento.receptor_id}"
     )
 
-    await incrementar_mensajes_no_leidos(evento.receptor_id)
+    # Incrementar contador específico de la pareja receptor+emisor.
+    # El frontend usa este valor para mostrar el badge individual
+    # junto a cada contacto en la lista.
+    await incrementar_no_leidos_de(evento.receptor_id, evento.emisor_id)
 
+    # Notificar via WebSocket si el receptor está conectado.
+    # El evento incluye el emisor_id para que el frontend pueda
+    # actualizar el badge específico de ese contacto inmediatamente.
     await manager.notify(evento.receptor_id, {
         "tipo": "nuevo_mensaje",
         "emisor_id": evento.emisor_id,
         "emisor_nombre": evento.emisor_nombre
     })
 
-    # Indica si el receptor estaba conectado por WebSocket en este momento
     conectado = manager.esta_conectado(evento.receptor_id)
     log.info(
         f"Notificación entregada al WebSocket: "

@@ -106,10 +106,33 @@ export async function obtenerConversacion(usuario_id) {
   return res.json();
 }
 
-export async function obtenerNoLeidos(usuario_id) {
-  const res = await fetch(`${BASE_URL}/no_leidos/${usuario_id}`);
-  if (!res.ok) return { no_leidos: 0 };
-  return res.json();
+/**
+ * Consulta los mensajes no leídos del usuario.
+ * Retorna { no_leidos: total, por_contacto: { uuid: cantidad } }
+ */
+export async function obtenerNoLeidos(usuarioId) {
+  try {
+    const res = await fetch(`${BASE_URL}/no_leidos/${usuarioId}`)
+    if (!res.ok) return { no_leidos: 0, por_contacto: {} }
+    return await res.json()
+  } catch {
+    return { no_leidos: 0, por_contacto: {} }
+  }
+}
+
+/**
+ * Marca todos los mensajes con un contacto específico como leídos.
+ * Se llama cuando el usuario abre el chat con ese contacto.
+ */
+export async function marcarComoLeidos(usuarioId, contactoId) {
+  try {
+    await fetch(
+      `${BASE_URL}/no_leidos/${usuarioId}/${contactoId}`,
+      { method: 'DELETE' }
+    )
+  } catch (error) {
+    console.warn('Error al marcar como leídos:', error)
+  }
 }
 
 // ── Inteligencia Artificial ───────────────────────────────────────────────

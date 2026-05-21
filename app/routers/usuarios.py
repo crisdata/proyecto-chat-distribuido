@@ -7,12 +7,16 @@
 
 import uuid
 from fastapi import APIRouter, HTTPException, Depends
-from app.models import UsuarioCreate, UsuarioResponse, UsuarioAutenticadoResponse
+from app.models import (
+    UsuarioCreate, UsuarioResponse, UsuarioAutenticadoResponse,
+    PresenciaResponse, PresenciaBulkRequest
+)
 from app.database import get_connection, release_connection
 from app.cache import (
     adquirir_lock, liberar_lock,
     cachear_usuario,
-    get_redis
+    get_redis,
+    obtener_presencia, obtener_presencia_bulk
 )
 from app.auth import crear_token, autenticar_usuario_actual
 
@@ -138,3 +142,74 @@ async def usuario_actual(payload: dict = Depends(autenticar_usuario_actual)):
         }
     finally:
         await release_connection(conn)
+
+# ── Presencia ────────────────────────────────────────────────────────────────
+
+@router.get("/{usuario_id}/presencia", response_model=PresenciaResponse)
+async def consultar_presencia(usuario_id: str):
+    """
+    Retorna el estado de presencia de un usuario específico.
+    Para usuarios humanos: depende de su conexión WebSocket.
+    Para Lumi: depende de si Ollama está respondiendo.
+    """
+    # Importación local para evitar dependencia circular
+    from app.routers.ia import obtener_id_ia, verificar_ollama_disponible
+
+    # Caso especial: si es Lumi, su presencia depende de Ollama
+    ia_id = await obtener_id_ia()
+    if usuario_id == ia_id:
+        ollama_ok = await verificar_ollama_disponible()
+        return {
+            "usuario_id": usuario_id,
+            "estado": "online" if ollama_ok else "reposando",
+            "ultima_actividad": None
+        }
+
+    # Caso normal: usuario humano
+    presencia = await obtener_presencia(usuario_id)
+    return {
+        "usuario_id": usuario_id,
+        "estado": presencia["estado"],
+        "ultima_actividad": presencia["ultima_actividad"]
+    }
+
+
+@router.post("/presencia/bulk", response_model=list[PresenciaResponse])
+async def consultar_presencia_bulk(datos: PresenciaBulkRequest):
+    """
+    Retorna el estado de presencia de varios usuarios en una sola petición.
+    Optimizado para la lista de contactos: una sola llamada cada 10s
+    devuelve el estado de todos los contactos a la vez.
+
+    Lumi se trata especialmente: su presencia depende del estado de Ollama,
+    no del WebSocket. Se reporta "online" si Ollama responde, "reposando" si no.
+    """
+    from app.routers.ia import obtener_id_ia, verificar_ollama_disponible
+
+    ia_id = await obtener_id_ia()
+
+    # Separar Lumi del resto para procesarla aparte
+    ids_humanos = [uid for uid in datos.usuario_ids if uid != ia_id]
+    incluye_lumi = ia_id in datos.usuario_ids
+
+    # Consultar presencia de humanos en bulk (operación rápida)
+    presencias_humanos = await obtener_presencia_bulk(ids_humanos)
+    resultado = [
+        {
+            "usuario_id": uid,
+            "estado": p["estado"],
+            "ultima_actividad": p["ultima_actividad"]
+        }
+        for uid, p in presencias_humanos.items()
+    ]
+
+    # Si Lumi estaba en la lista, consultar Ollama y añadirla
+    if incluye_lumi:
+        ollama_ok = await verificar_ollama_disponible()
+        resultado.append({
+            "usuario_id": ia_id,
+            "estado": "online" if ollama_ok else "reposando",
+            "ultima_actividad": None
+        })
+
+    return resultado

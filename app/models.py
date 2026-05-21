@@ -92,6 +92,21 @@ class RespuestaError(BaseModel):
 # ── Mensajes no leídos ──────────────────────────────────────────────────────
 
 class NoLeidosResponse(BaseModel):
-    """Retorna el contador de mensajes no leídos de un usuario."""
+    """Respuesta del endpoint de no leídos.
+    Incluye el total global y el desglose por contacto."""
     usuario_id: str
     no_leidos: int
+    por_contacto: dict[str, int] = {}
+
+# ── Presencia ────────────────────────────────────────────────────────────────
+
+class PresenciaResponse(BaseModel):
+    """Estado de presencia de un usuario."""
+    usuario_id: str
+    estado: str  # "online" | "offline"
+    ultima_actividad: Optional[str] = None
+
+
+class PresenciaBulkRequest(BaseModel):
+    """Request para consultar la presencia de varios usuarios a la vez."""
+    usuario_ids: list[str]

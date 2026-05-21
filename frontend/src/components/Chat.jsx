@@ -1,8 +1,9 @@
 // Chat.jsx
 // Panel derecho con la conversación. Avatar del contacto con gradiente único.
+// Header muestra estado de presencia real (En línea / Activo hace X / Reposando).
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, Bot, User, Loader, Wifi, WifiOff, Shield, Flame } from 'lucide-react'
+import { Send, Bot, User, Loader, Shield, Flame } from 'lucide-react'
 import Mensaje from './Mensaje'
 import {
   enviarMensaje,
@@ -11,17 +12,23 @@ import {
   crearWebSocket
 } from '../services/api'
 import { getAvatarStyle } from '../utils/avatarColors'
+import { formatearTiempoRelativo } from '../utils/tiempo'
+import IndicadorPresencia from './IndicadorPresencia'
 
 const BASE_URL = '/api'
 
-export default function Chat({ usuarioActual, contacto, iaId }) {
+export default function Chat({ usuarioActual, contacto, iaId, presencias = {} }) {
   const [mensajes, setMensajes] = useState([])
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [cargando, setCargando] = useState(true)
-  const [estadoWS, setEstadoWS] = useState('conectado')
   const finalRef = useRef(null)
   const esIA = contacto.id === iaId
+
+  // Presencia del contacto que estoy viendo
+  const presencia = presencias[contacto.id]
+  const estado = presencia?.estado || 'offline'
+  const ultimaActividad = presencia?.ultima_actividad
 
   const cargarConversacion = useCallback(async () => {
     try {
@@ -49,7 +56,7 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
           cargarConversacion()
         }
       },
-      (estado) => setEstadoWS(estado)
+      () => {}  // estado WS no se usa aquí (lo maneja App.jsx)
     )
 
     return () => cerrarWS()
@@ -118,26 +125,27 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
     })
   }
 
-  const indicadorWS = {
-    conectado: {
-      icono: <Wifi size={14} />,
-      texto: 'En línea',
-      clase: 'text-online-400'
-    },
-    reconectando: {
-      icono: <Loader size={14} className="animate-spin" />,
-      texto: 'Reconectando...',
-      clase: 'text-amber-400'
-    },
-    desconectado: {
-      icono: <WifiOff size={14} />,
-      texto: 'Sin conexión',
-      clase: 'text-red-400'
+  // Texto descriptivo del estado del contacto en el header
+  function getTextoEstado() {
+    if (esIA) {
+      if (estado === 'online') return `Modelo: ${import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2:3b'}`
+      if (estado === 'reposando') return 'Reposando — vuelve en un momento'
+      return 'No disponible'
     }
-  }[estadoWS] || {
-    icono: <Wifi size={14} />,
-    texto: 'En línea',
-    clase: 'text-online-400'
+
+    if (estado === 'online') return 'En línea'
+    if (estado === 'offline') {
+      const relativo = formatearTiempoRelativo(ultimaActividad)
+      return relativo ? `Activo ${relativo}` : 'Desconectado'
+    }
+    return ''
+  }
+
+  // Color del texto según el estado
+  function getColorEstado() {
+    if (estado === 'online') return esIA ? 'text-lumi-400' : 'text-online-400'
+    if (estado === 'reposando') return 'text-amber-400'
+    return 'text-vibe-500'
   }
 
   return (
@@ -146,33 +154,38 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
       {/* Encabezado de la conversación */}
       <div className="bg-vibe-950 border-b border-vibe-800 px-6 py-4
                       flex items-center gap-3">
-        {/* Avatar del contacto con gradiente único */}
-        <div
-          style={getAvatarStyle(contacto.nombre, esIA)}
-          className={`w-10 h-10 rounded-full flex items-center justify-center
-                      font-semibold flex-shrink-0
-                      ${esIA ? 'text-white' : ''}`}
-        >
-          {esIA
-            ? <Bot size={20} />
-            : contacto.nombre.charAt(0).toUpperCase()
-          }
+        {/* Avatar del contacto con indicador de presencia */}
+        <div className="relative flex-shrink-0">
+          <div
+            style={getAvatarStyle(contacto.nombre, esIA)}
+            className={`w-10 h-10 rounded-full flex items-center justify-center
+                        font-semibold
+                        ${esIA ? 'text-white' : ''}`}
+          >
+            {esIA
+              ? <Bot size={20} />
+              : contacto.nombre.charAt(0).toUpperCase()
+            }
+          </div>
+          <IndicadorPresencia estado={estado} tamano="sm" />
         </div>
+
         <div className="flex-1">
           <h3 className="font-semibold text-vibe-100 text-sm">
             {contacto.nombre}
           </h3>
-          {esIA ? (
-            <p className="text-xs text-lumi-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-lumi-400 inline-block"></span>
-              {`Modelo: ${import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2:3b'}`}
-            </p>
-          ) : (
-            <div className={`flex items-center gap-1 text-xs ${indicadorWS.clase}`}>
-              {indicadorWS.icono}
-              <span>{indicadorWS.texto}</span>
-            </div>
-          )}
+          <p className={`text-xs flex items-center gap-1 ${getColorEstado()}`}>
+            {estado === 'online' && !esIA && (
+              <span className="w-1.5 h-1.5 rounded-full bg-online-400 inline-block" />
+            )}
+            {estado === 'online' && esIA && (
+              <span className="w-1.5 h-1.5 rounded-full bg-lumi-400 inline-block" />
+            )}
+            {estado === 'reposando' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+            )}
+            {getTextoEstado()}
+          </p>
         </div>
         <Shield size={18} className="text-cyan-500" />
       </div>
@@ -200,7 +213,7 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
             </div>
             <p className="text-sm font-medium text-vibe-300">
               {esIA
-                ? '¡Hola! Soy tu asistente de IA. ¿En qué puedo ayudarte?'
+                ? '¡Hola! Soy Lumi, tu compañera virtual. ¿En qué puedo acompañarte?'
                 : `Inicia una conversación con ${contacto.nombre}`
               }
             </p>
@@ -212,7 +225,7 @@ export default function Chat({ usuarioActual, contacto, iaId }) {
         {enviando && esIA && (
           <div className="flex items-center gap-2 mt-2 text-vibe-500 text-xs">
             <Loader size={14} className="animate-spin text-lumi-400" />
-            <span>El asistente está pensando...</span>
+            <span>Lumi está pensando...</span>
           </div>
         )}
         <div ref={finalRef} />

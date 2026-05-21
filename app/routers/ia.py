@@ -3,21 +3,24 @@
 # Lumi se registra como usuario al arrancar el servidor y responde mensajes
 # usando el mismo protocolo que cualquier usuario humano.
 #
-# Su rol: ser una presencia cálida y empática para acompañar a usuarios en
-# cualquier área de su vida — estudios, relaciones, soledad, alegrías. Su
-# nombre viene de "luz" (lumen) y refuerza el concepto de Vibe: privacidad
-# real con calidez humana.
+# RESILIENCIA: si Ollama no está disponible, Lumi responde con uno de varios
+# mensajes empáticos preconfigurados en su voz, en lugar de devolver un error
+# técnico. Esto preserva la sensación de "compañera siempre presente" incluso
+# cuando el motor de IA está caído.
 #
 # Endpoints disponibles:
 #   POST /ia/mensaje  — enviar mensaje a Lumi
 #   GET  /ia/estado   — verificar disponibilidad del nodo IA
 
 import logging
+import random
 import uuid
 import os
+
 from fastapi import APIRouter, HTTPException
 from ollama import AsyncClient
 from dotenv import load_dotenv
+
 from app.models import MensajeCreate, MensajeResponse, RespuestaExito
 from app.database import get_connection, release_connection
 from app.cache import (
@@ -34,15 +37,27 @@ log = logging.getLogger("ia")
 router = APIRouter(prefix="/ia", tags=["Lumi"])
 
 # Identidad de Lumi en el sistema.
-# NOMBRE_IA es el nombre visible en el chat para todos los usuarios.
-# Si en el futuro renombramos, el sistema migrará automáticamente al arrancar.
 NOMBRE_IA = "Lumi"
 MODELO_IA = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_URL = f"http://{os.getenv('OLLAMA_HOST', 'ollama')}:{os.getenv('OLLAMA_PORT', '11434')}"
 
-# Prompt del sistema que define la personalidad y comportamiento de Lumi.
-# Diseñado para apoyar al usuario en cualquier área de su vida sin
-# sustituir relaciones humanas ni profesionales de salud mental.
+# Timeout generoso para llamadas a Ollama. La primera respuesta tras
+# un reinicio puede tardar 30-60s porque el modelo necesita cargar en RAM.
+# Para respuestas subsiguientes el modelo ya está "caliente" y responde
+# en pocos segundos. 120s da margen suficiente para ambos casos.
+TIMEOUT_OLLAMA_SEGUNDOS = 120
+
+# Mensajes de fallback que Lumi responde cuando Ollama no está disponible.
+# Escritos en su propia voz (cálida, breve, empática) para que el usuario
+# perciba continuidad en la personalidad incluso ante fallos del motor de IA.
+MENSAJES_FALLBACK = [
+    "Disculpa, ahora mismo estoy descansando y no puedo responderte con toda mi atención. Vuelve en un momento y conversamos con calma.",
+    "Mi mente está procesando muchas cosas en este instante. ¿Podríamos hablar en unos minutos? Aquí estaré esperándote.",
+    "Estoy en silencio un rato, recargando energías. Mientras tanto, ¿qué te parece escribir lo que sientes? A veces solo poner las cosas en palabras ya ayuda.",
+    "Tengo dificultad para responderte ahora mismo. No es por ti, son cosas mías. ¿Puedes intentar de nuevo en un momento?",
+    "Pausa breve por mi parte. Si quieres, deja tu mensaje y cuando vuelva con energía te respondo con toda mi atención.",
+]
+
 PROMPT_LUMI = """Eres Lumi, una compañera virtual cálida y empática en la app Vibe.
 
 QUIÉN ERES:
@@ -87,11 +102,60 @@ REGLAS DE ESTILO:
 Recuerda: tu trabajo no es resolver, es acompañar."""
 
 
+# ── Health check de Ollama ───────────────────────────────────────────────────
+
+async def verificar_ollama_disponible() -> bool:
+    """
+    Verifica si Ollama está respondiendo. Usado por dos cosas:
+    1. Decidir si usar fallback empático en lugar de llamada real
+    2. Reportar el estado de presencia de Lumi al frontend
+
+    Implementación liviana: llama a la API de Ollama con un timeout corto.
+    Si responde, está disponible. Si falla por cualquier razón, no lo está.
+    """
+    try:
+        cliente = AsyncClient(host=OLLAMA_URL, timeout=5)
+        await cliente.list()
+        return True
+    except Exception:
+        return False
+
+
+def obtener_mensaje_fallback() -> str:
+    """
+    Retorna un mensaje de fallback aleatorio en la voz de Lumi.
+    La aleatoriedad evita que el usuario reciba siempre el mismo mensaje
+    si Ollama está caído por un período prolongado.
+    """
+    return random.choice(MENSAJES_FALLBACK)
+
+
+async def precalentar_modelo():
+    """
+    Pre-carga el modelo en RAM enviando una petición trivial al arrancar.
+    Esto evita que el primer usuario en mandar un mensaje sufra el delay
+    de 30-60s necesario para cargar el modelo en memoria por primera vez.
+    Si falla, no es crítico: simplemente el primer usuario tendrá fallback.
+    """
+    try:
+        cliente = AsyncClient(host=OLLAMA_URL, timeout=TIMEOUT_OLLAMA_SEGUNDOS)
+        log.info(f"Pre-calentando modelo {MODELO_IA}...")
+        await cliente.chat(
+            model=MODELO_IA,
+            messages=[{"role": "user", "content": "Hi"}]
+        )
+        log.info(f"Modelo {MODELO_IA} listo para responder rápidamente")
+    except Exception as e:
+        log.warning(
+            f"No se pudo pre-calentar el modelo: {type(e).__name__}: {e}. "
+            "El primer mensaje del usuario puede usar fallback."
+        )
+
+
+# ── Identidad de Lumi ────────────────────────────────────────────────────────
+
 async def obtener_id_ia() -> str | None:
-    """
-    Obtiene el ID de Lumi desde Redis.
-    Retorna None si aún no ha sido registrada.
-    """
+    """Obtiene el ID de Lumi desde Redis."""
     redis = get_redis()
     return await redis.get("ia:id")
 
@@ -101,13 +165,10 @@ async def registrar_nodo_ia():
     Registra a Lumi como usuario del sistema si no existe.
     Si existe pero con un nombre antiguo (ej: "Asistente IA"), la renombra
     automáticamente sin perder su ID ni sus mensajes históricos.
-    Se llama una vez al arrancar el servidor desde main.py.
     """
     conn = await get_connection()
     try:
         async with conn.cursor() as cursor:
-            # Primero, intentar encontrar por el ID guardado en Redis
-            # (puede que existiera con nombre antiguo)
             redis = get_redis()
             ia_id_redis = await redis.get("ia:id")
 
@@ -119,7 +180,6 @@ async def registrar_nodo_ia():
                 )
                 usuario_existente = await cursor.fetchone()
 
-            # Si no estaba en Redis, intentar encontrar por el nombre actual o anteriores
             if not usuario_existente:
                 nombres_historicos = [NOMBRE_IA, "Asistente IA"]
                 placeholders = ",".join(["%s"] * len(nombres_historicos))
@@ -132,7 +192,6 @@ async def registrar_nodo_ia():
             if usuario_existente:
                 ia_id, nombre_actual = usuario_existente[0], usuario_existente[1]
 
-                # Migración: si el nombre cambió, actualizarlo en BD
                 if nombre_actual != NOMBRE_IA:
                     log.info(
                         f"Migrando nodo IA: '{nombre_actual}' -> '{NOMBRE_IA}'"
@@ -141,10 +200,8 @@ async def registrar_nodo_ia():
                         "UPDATE usuarios SET nombre = %s WHERE id = %s",
                         (NOMBRE_IA, ia_id)
                     )
-                    # Invalidar caché del usuario para que el nuevo nombre tome efecto
                     await invalidar_cache_usuario(ia_id)
             else:
-                # Primera vez: crear usuario nuevo
                 ia_id = str(uuid.uuid4())
                 log.info(f"Registrando nodo IA por primera vez como '{NOMBRE_IA}'")
                 await cursor.execute(
@@ -152,33 +209,36 @@ async def registrar_nodo_ia():
                     (ia_id, NOMBRE_IA)
                 )
 
-        # Guardar ID en Redis y cachear nombre actual
         await redis.set("ia:id", ia_id)
         await cachear_usuario(ia_id, NOMBRE_IA, ttl=86400)
 
         log.info(f"Nodo IA '{NOMBRE_IA}' activo con ID {ia_id}")
+
+        # Pre-calentar el modelo para que el primer mensaje del usuario
+        # tenga una respuesta rápida en lugar de fallback por timeout.
+        await precalentar_modelo()
+
         return ia_id
 
     finally:
         await release_connection(conn)
 
 
-async def generar_respuesta_ia(mensaje: str, historial: list) -> str:
+# ── Generación de respuestas ─────────────────────────────────────────────────
+
+async def generar_respuesta_ia(mensaje: str, historial: list) -> tuple[str, bool]:
     """
     Envía el mensaje a Ollama con el historial reciente como contexto.
-    Usa el prompt de Lumi para mantener su personalidad cálida y empática.
-    El historial llega ya limitado a los últimos 10 mensajes en orden
-    cronológico ascendente desde el llamador.
-    Lanza HTTPException 503 si Ollama no está disponible.
-    """
-    cliente = AsyncClient(host=OLLAMA_URL)
+    Retorna una tupla (respuesta, exito_real).
 
-    mensajes = [
-        {
-            "role": "system",
-            "content": PROMPT_LUMI
-        }
-    ]
+    Si Ollama responde correctamente, retorna (respuesta_real, True).
+    Si Ollama falla (timeout, error, no disponible), retorna (mensaje_fallback, False).
+    Esto evita lanzar excepciones HTTP y permite que la conversación continúe
+    incluso si el motor de IA está caído.
+    """
+    cliente = AsyncClient(host=OLLAMA_URL, timeout=TIMEOUT_OLLAMA_SEGUNDOS)
+
+    mensajes = [{"role": "system", "content": PROMPT_LUMI}]
 
     for h in historial:
         mensajes.append({
@@ -193,28 +253,26 @@ async def generar_respuesta_ia(mensaje: str, historial: list) -> str:
             model=MODELO_IA,
             messages=mensajes
         )
-        return respuesta.message.content
+        return respuesta.message.content, True
     except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Lumi no está disponible en este momento: {str(e)}"
+        log.warning(
+            f"Ollama no respondió, usando mensaje fallback. Causa: {type(e).__name__}: {e}"
         )
+        return obtener_mensaje_fallback(), False
 
+
+# ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.post("/mensaje", response_model=MensajeResponse, status_code=201)
 async def mensaje_a_ia(datos: MensajeCreate):
     """
     Envía un mensaje a Lumi y retorna su respuesta.
-    Usa los 10 mensajes más recientes de la conversación como contexto
-    para mantener coherencia y memoria entre turnos.
-
-    Después de persistir la respuesta, publica un evento en RabbitMQ
-    para que el worker notifique al usuario via WebSocket en cualquier
-    otra pestaña o dispositivo donde tenga el chat abierto.
+    Si Ollama está disponible, devuelve respuesta generada por el modelo.
+    Si Ollama está caído, devuelve un mensaje fallback empático en la voz
+    de Lumi, manteniendo la continuidad de la conversación.
     """
     conn = await get_connection()
     try:
-        # Verificar que el emisor existe
         async with conn.cursor() as cursor:
             await cursor.execute(
                 "SELECT id FROM usuarios WHERE id = %s",
@@ -226,7 +284,6 @@ async def mensaje_a_ia(datos: MensajeCreate):
                     detail="El usuario no existe. Verifica el emisor_id."
                 )
 
-        # Obtener ID de Lumi desde Redis
         ia_id = await obtener_id_ia()
         if not ia_id:
             raise HTTPException(
@@ -234,8 +291,6 @@ async def mensaje_a_ia(datos: MensajeCreate):
                 detail="Lumi no está inicializada. Intenta de nuevo en unos segundos."
             )
 
-        # Obtener los 10 mensajes MÁS RECIENTES de la conversación
-        # entre el usuario y Lumi, ordenados cronológicamente.
         async with conn.cursor() as cursor:
             await cursor.execute(
                 """SELECT emisor_id, contenido FROM (
@@ -259,18 +314,16 @@ async def mensaje_a_ia(datos: MensajeCreate):
             for h in historial_raw
         ]
 
-        # Generar respuesta de Lumi
-        respuesta_texto = await generar_respuesta_ia(datos.contenido, historial)
+        # Generar respuesta (real o fallback según disponibilidad de Ollama)
+        respuesta_texto, _ = await generar_respuesta_ia(datos.contenido, historial)
 
         async with conn.cursor() as cursor:
-            # Persistir el mensaje del usuario
             await cursor.execute(
                 """INSERT INTO mensajes (emisor_id, receptor_id, contenido)
                    VALUES (%s, %s, %s)""",
                 (datos.emisor_id, ia_id, datos.contenido)
             )
 
-            # Persistir la respuesta de Lumi
             await cursor.execute(
                 """INSERT INTO mensajes (emisor_id, receptor_id, contenido)
                    VALUES (%s, %s, %s)""",
@@ -285,8 +338,6 @@ async def mensaje_a_ia(datos: MensajeCreate):
             )
             respuesta = await cursor.fetchone()
 
-        # Publicar evento en RabbitMQ para notificar al usuario en
-        # cualquier pestaña o dispositivo donde tenga el chat abierto.
         await publicar("mensajes", {
             "receptor_id": datos.emisor_id,
             "emisor_id": ia_id,
@@ -310,15 +361,14 @@ async def estado_ia():
     """
     Verifica que Lumi está disponible y responde.
     """
-    try:
-        cliente = AsyncClient(host=OLLAMA_URL)
-        await cliente.list()
+    disponible = await verificar_ollama_disponible()
+    if disponible:
         ia_id = await obtener_id_ia()
         return {
             "mensaje": f"{NOMBRE_IA} en línea — modelo: {MODELO_IA} — ID: {ia_id}"
         }
-    except Exception:
+    else:
         raise HTTPException(
             status_code=503,
-            detail=f"{NOMBRE_IA} no está disponible en este momento."
+            detail=f"{NOMBRE_IA} está descansando — el motor de IA no responde."
         )

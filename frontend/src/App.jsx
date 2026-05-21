@@ -1,8 +1,11 @@
 // App.jsx
 // Componente raíz de la aplicación.
 // Gestiona el estado global y aplica el contenedor con la paleta Vibe.
+//
+// Los polling de presencia y no leídos viven aquí porque App.jsx es el
+// único componente que NUNCA se desmonta mientras hay sesión activa.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { MessageCircle } from 'lucide-react'
 import Registro from './components/Registro'
 import Sidebar from './components/Sidebar'
@@ -12,8 +15,11 @@ import {
   listarUsuarios,
   obtenerIdIA,
   obtenerUsuarioActual,
+  obtenerNoLeidos,
+  marcarComoLeidos,
   setToken
 } from './services/api'
+import { usePresencia } from './hooks/usePresencia'
 
 export default function App() {
   const [usuario, setUsuario] = useState(null)
@@ -21,8 +27,18 @@ export default function App() {
   const [contactoActivo, setContactoActivo] = useState(null)
   const [iaId, setIaId] = useState(null)
   const [cargandoSesion, setCargandoSesion] = useState(true)
+  const [noLeidos, setNoLeidos] = useState({ total: 0, porContacto: {} })
 
-  // Al montar: intentar restaurar la sesión desde el token
+  const huellaContactosRef = useRef('')
+
+  const idsParaPresencia = useMemo(
+    () => contactos.map(c => c.id),
+    [contactos]
+  )
+
+  const presencias = usePresencia(idsParaPresencia)
+
+  // Restaurar sesión al montar
   useEffect(() => {
     async function restaurarSesion() {
       const usuarioRecuperado = await obtenerUsuarioActual()
@@ -34,7 +50,7 @@ export default function App() {
     restaurarSesion()
   }, [])
 
-  // Al tener usuario, cargar contactos e ID del nodo IA
+  // Polling de contactos cada 10s
   useEffect(() => {
     if (!usuario) return
 
@@ -44,29 +60,90 @@ export default function App() {
           listarUsuarios(),
           obtenerIdIA()
         ])
-        setContactos(usuarios.filter(u => u.id !== usuario.id))
-        setIaId(idIA)
+
+        const nuevosContactos = usuarios.filter(u => u.id !== usuario.id)
+        const nuevaHuella = nuevosContactos
+          .map(c => `${c.id}:${c.nombre}`)
+          .sort()
+          .join('|')
+
+        if (nuevaHuella !== huellaContactosRef.current) {
+          huellaContactosRef.current = nuevaHuella
+          setContactos(nuevosContactos)
+        }
+
+        setIaId(prev => prev === idIA ? prev : idIA)
       } catch (error) {
         console.error('Error al cargar contactos:', error)
       }
     }
 
     cargarDatos()
-
     const intervalo = setInterval(cargarDatos, 10000)
     return () => clearInterval(intervalo)
   }, [usuario])
 
-  // Cerrar sesión: limpia token, contactos y vuelve al registro
+  // Polling de mensajes no leídos cada 3s.
+  // Usa una ref con el id del usuario para que el polling sea
+  // estable y no se reinicie por re-renders.
+  const usuarioIdRef = useRef(null)
+  usuarioIdRef.current = usuario?.id || null
+
+  useEffect(() => {
+    if (!usuario) {
+      setNoLeidos({ total: 0, porContacto: {} })
+      return
+    }
+
+    let cancelado = false
+
+    async function actualizar() {
+      const uid = usuarioIdRef.current
+      if (!uid) return
+
+      const data = await obtenerNoLeidos(uid)
+      if (cancelado) return
+
+      setNoLeidos({
+        total: data.no_leidos || 0,
+        porContacto: data.por_contacto || {}
+      })
+    }
+
+    actualizar()
+    const intervalo = setInterval(actualizar, 3000)
+
+    return () => {
+      cancelado = true
+      clearInterval(intervalo)
+    }
+  }, [usuario])
+
+  // Al seleccionar un contacto, marcarlo como leído.
+  // Esto borra el badge específico de ese contacto.
+  async function handleSeleccionarContacto(contacto) {
+    setContactoActivo(contacto)
+    if (usuario && contacto) {
+      await marcarComoLeidos(usuario.id, contacto.id)
+      // Refrescar inmediatamente para que el badge desaparezca
+      const data = await obtenerNoLeidos(usuario.id)
+      setNoLeidos({
+        total: data.no_leidos || 0,
+        porContacto: data.por_contacto || {}
+      })
+    }
+  }
+
   function handleLogout() {
     setToken(null)
     setUsuario(null)
     setContactos([])
     setContactoActivo(null)
     setIaId(null)
+    setNoLeidos({ total: 0, porContacto: {} })
+    huellaContactosRef.current = ''
   }
 
-  // Pantalla de carga inicial
   if (cargandoSesion) {
     return (
       <div className="flex items-center justify-center h-screen bg-vibe-950">
@@ -87,22 +164,22 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-vibe-950 overflow-hidden">
-      {/* Sidebar ahora recibe contactos e iaId para acceso rápido a Lumi,
-          y onSeleccionar para abrir la conversación con ella */}
       <Sidebar
         usuario={usuario}
         contactos={contactos}
         iaId={iaId}
-        onSeleccionar={setContactoActivo}
+        onSeleccionar={handleSeleccionarContacto}
         onLogout={handleLogout}
       />
 
       <ListaContactos
         contactos={contactos}
         contactoActivo={contactoActivo}
-        onSeleccionar={setContactoActivo}
+        onSeleccionar={handleSeleccionarContacto}
         usuarioActual={usuario}
         iaId={iaId}
+        presencias={presencias}
+        noLeidos={noLeidos}
       />
 
       {contactoActivo ? (
@@ -110,6 +187,7 @@ export default function App() {
           usuarioActual={usuario}
           contacto={contactoActivo}
           iaId={iaId}
+          presencias={presencias}
         />
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center bg-vibe-950">
