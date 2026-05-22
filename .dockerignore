@@ -1,0 +1,46 @@
+# Entorno virtual de Python (no debe entrar al contenedor)
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Git e IDEs
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Variables de entorno (se inyectan en runtime)
+.env
+.env.local
+.env.*.local
+
+# Documentación y archivos auxiliares (no necesarios en runtime)
+*.md
+docs/
+LICENSE
+
+# Frontend completo (tiene su propio build separado)
+frontend/
+
+# CI/CD
+.github/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Logs y archivos temporales
+*.log
+logs/
+tmp/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

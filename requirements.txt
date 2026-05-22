@@ -25,3 +25,6 @@ aio-pika==9.4.3
 
 # Autenticación JWT (Bloque 2)
 pyjwt==2.10.1
+
+# HTTP asíncrono — usado por el worker para llamadas a la API interna
+aiohttp==3.9.5

@@ -1,0 +1,40 @@
+# Dependencias instaladas (se reinstalan en el build)
+node_modules/
+.pnpm-store/
+
+# Build outputs (se regenera con pnpm build)
+dist/
+build/
+
+# Cache y configuración local
+.vite/
+.cache/
+
+# Variables de entorno (no se necesitan en build estático)
+.env
+.env.local
+.env.*.local
+
+# Logs y temporales
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Sistema
+.DS_Store
+Thumbs.db

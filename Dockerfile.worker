@@ -9,8 +9,9 @@ WORKDIR /app
 # Copiar dependencias primero para aprovechar caché de Docker
 COPY requirements.txt .
 
-# Instalar dependencias incluyendo aiohttp para llamadas HTTP internas
-RUN pip install --no-cache-dir -r requirements.txt aiohttp==3.9.5
+# Instalar todas las dependencias desde el archivo único
+# (aiohttp ya está incluido en requirements.txt)
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el código fuente
 COPY . .
