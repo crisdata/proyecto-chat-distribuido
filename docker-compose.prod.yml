@@ -1,0 +1,203 @@
+# docker-compose.prod.yml
+# Versión de PRODUCCIÓN del sistema Vibe.
+#
+# A diferencia de docker-compose.yml (que construye desde código local),
+# este archivo descarga las imágenes pre-construidas desde DockerHub.
+#
+# Uso desde cualquier máquina (sin necesidad del código fuente):
+#   1. Copia este archivo y el archivo .env (basado en .env.example)
+#   2. Ejecuta: docker compose -f docker-compose.prod.yml up -d
+#
+# El sistema queda accesible en:
+#   - http://localhost           → Aplicación Vibe
+#   - http://localhost:15672     → RabbitMQ Management (guest/guest)
+#   - http://localhost:8081      → Redis Commander
+#   - http://localhost:9999      → Dozzle (logs en vivo)
+#   - http://localhost:9000      → Portainer
+
+services:
+
+  # ── Frontend React + Nginx ────────────────────────────────────────────
+  frontend:
+    image: crisdatap/vibe-frontend:latest
+    container_name: chat_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    networks:
+      - public_network
+
+  # ── API principal ─────────────────────────────────────────────────────
+  api:
+    image: crisdatap/vibe-api:latest
+    container_name: chat_api
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - public_network
+      - app_network
+      - data_network
+
+  # ── Base de datos relacional ──────────────────────────────────────────
+  db:
+    image: mariadb:11
+    container_name: chat_db
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - data_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Caché y coordinación distribuida ─────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: chat_redis
+    restart: unless-stopped
+    networks:
+      - data_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Nodo de inteligencia artificial local ────────────────────────────
+  # NOTA: arranca sin modelo descargado. Lumi entrará en modo "reposando"
+  # (fallback empático) hasta que se ejecute manualmente:
+  #   docker exec chat_ollama ollama pull llama3.2:3b
+  # (requiere conectar el contenedor a public_network temporalmente)
+  ollama:
+    image: ollama/ollama
+    container_name: chat_ollama
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - data_network
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Broker de mensajes ────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: chat_rabbitmq
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "15672:15672"
+    networks:
+      - public_network
+      - app_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ── Worker de mensajería ──────────────────────────────────────────────
+  worker:
+    image: crisdatap/vibe-worker:latest
+    container_name: chat_worker
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      api:
+        condition: service_started
+    networks:
+      - app_network
+      - data_network
+
+  # ── Dozzle — Visualizador de logs ────────────────────────────────────
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: chat_dozzle
+    restart: unless-stopped
+    ports:
+      - "9999:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOZZLE_LEVEL: info
+      DOZZLE_NO_ANALYTICS: "true"
+
+  # ── Redis Commander — Explorador de Redis ───────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: chat_redis_commander
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: "local:redis:6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - public_network
+      - data_network
+
+  # ── Portainer — Administrador web de Docker ──────────────────────────
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: chat_portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+# ── Volúmenes persistentes ────────────────────────────────────────────
+volumes:
+  db_data:
+  ollama_data:
+  rabbitmq_data:
+  portainer_data:
+
+# ── Redes segmentadas por capa ────────────────────────────────────────
+networks:
+  public_network:
+    driver: bridge
+  app_network:
+    driver: bridge
+    internal: true
+  data_network:
+    driver: bridge
+    internal: true

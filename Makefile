@@ -107,3 +107,39 @@ prune-all:  ## Limpieza profunda: cache, volumenes, contenedores parados e image
 	@echo ""
 	@echo "Limpieza profunda completada:"
 	@docker system df
+
+
+# ── Comandos de PRODUCCIÓN (usar imágenes de DockerHub) ──────────────
+
+prod-up: ## Levanta el sistema en modo producción (descarga imágenes de DockerHub)
+	docker compose -f docker-compose.prod.yml up -d
+	@echo ""
+	@echo "Sistema Vibe arrancado en modo producción"
+	@echo ""
+	@echo "Accede a: http://localhost"
+	@echo "API docs:  http://localhost/api/docs"
+	@echo ""
+	@echo "NOTA: Lumi (IA) está en modo 'reposando' hasta que descargues el modelo."
+	@echo "      Para activarla, ejecuta: make prod-pull-model"
+
+prod-down: ## Detiene el sistema en modo producción
+	docker compose -f docker-compose.prod.yml down
+
+prod-pull: ## Descarga las imágenes más recientes desde DockerHub
+	docker compose -f docker-compose.prod.yml pull
+
+prod-pull-model: ## Descarga el modelo de IA llama3.2:3b en producción
+	@echo "Conectando Ollama a internet temporalmente..."
+	docker network connect proyecto1_public_network chat_ollama || true
+	@echo "Descargando modelo llama3.2:3b (puede tardar varios minutos)..."
+	docker exec -it chat_ollama ollama pull llama3.2:3b
+	@echo "Desconectando Ollama de internet..."
+	docker network disconnect proyecto1_public_network chat_ollama || true
+	@echo ""
+	@echo "Modelo descargado. Lumi ya puede responder con la IA."
+
+prod-logs: ## Muestra logs del sistema en producción
+	docker compose -f docker-compose.prod.yml logs -f --tail=100
+
+prod-status: ## Muestra el estado de los contenedores en producción
+	docker compose -f docker-compose.prod.yml ps

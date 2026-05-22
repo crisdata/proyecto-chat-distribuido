@@ -543,6 +543,122 @@ En Mac:
 xcode-select --install
 ```
 
+## Despliegue automatizado (CI/CD)
+
+![Build Status](https://github.com/crisdata/proyecto-chat-distribuido/actions/workflows/docker.yml/badge.svg)
+
+El sistema cuenta con un pipeline de CI/CD implementado en GitHub Actions que
+automatiza la construcción y publicación de las imágenes Docker cada vez que
+se hace un push a la rama `main`.
+
+### Imágenes publicadas en DockerHub
+
+Las tres imágenes del sistema están disponibles públicamente:
+
+- `crisdatap/vibe-api:latest` — Backend FastAPI con WebSocket
+- `crisdatap/vibe-worker:latest` — Worker consumer de RabbitMQ
+- `crisdatap/vibe-frontend:latest` — React 19 + Nginx (build multi-stage)
+
+DockerHub: https://hub.docker.com/u/crisdatap
+
+### Desplegar el sistema desde cualquier máquina
+
+Cualquier máquina con Docker puede ejecutar el sistema completo **sin necesidad
+de tener el código fuente**. Solo se requieren dos archivos:
+
+1. **`docker-compose.prod.yml`** — define los servicios usando imágenes de DockerHub
+2. **`.env`** — variables de entorno (basado en `.env.example`)
+
+#### Pasos completos para despliegue remoto
+
+```bash
+# 1. Crear carpeta de despliegue
+mkdir vibe-deploy && cd vibe-deploy
+
+# 2. Descargar docker-compose.prod.yml del repositorio
+curl -O https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/docker-compose.prod.yml
+
+# 3. Descargar plantilla de variables
+curl -O https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/.env.example
+mv .env.example .env
+
+# 4. Generar secretos únicos para esta instalación
+echo "JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
+echo "WORKER_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
+
+# 5. Levantar el sistema (descarga imágenes desde DockerHub)
+docker compose -f docker-compose.prod.yml up -d
+
+# 6. Verificar que arrancó correctamente
+docker ps
+
+# 7. (Opcional) Descargar el modelo de IA para activar a Lumi
+docker network connect vibe-deploy_public_network chat_ollama
+docker exec -it chat_ollama ollama pull llama3.2:3b
+docker network disconnect vibe-deploy_public_network chat_ollama
+```
+
+Acceder a la aplicación: **http://localhost**
+
+> **Nota sobre Lumi:** sin descargar el modelo, Lumi (la IA) responde con
+> mensajes de fallback empáticos en modo "reposando". Esto demuestra la
+> resiliencia del sistema ante la ausencia de componentes opcionales.
+
+### Comandos del Makefile para modo producción
+
+| Comando | Descripción |
+|---|---|
+| `make prod-up` | Levanta el sistema descargando imágenes desde DockerHub |
+| `make prod-down` | Detiene los contenedores conservando datos |
+| `make prod-pull` | Actualiza las imágenes a la última versión publicada |
+| `make prod-pull-model` | Descarga el modelo de IA para activar a Lumi |
+| `make prod-logs` | Muestra logs del sistema en vivo |
+| `make prod-status` | Estado de los contenedores |
+
+### Arquitectura del pipeline CI/CD
+
+```
+Desarrollador → git push origin main
+                       │
+                       ▼
+                 GitHub detecta push
+                       │
+                       ▼
+        ┌──────────────────────────────────┐
+        │   GitHub Actions (Ubuntu)         │
+        │                                   │
+        │   ┌─────────┐ ┌─────────┐ ┌─────┐│
+        │   │ build-  │ │ build-  │ │build││
+        │   │  api    │ │ worker  │ │front││
+        │   └────┬────┘ └────┬────┘ └──┬──┘│
+        │        │           │          │  │
+        │        └───────────┼──────────┘  │
+        │                    ▼              │
+        │              notify-success       │
+        └──────────────────┬───────────────┘
+                           │
+                           ▼ docker push
+                      ┌─────────┐
+                      │DockerHub│
+                      └────┬────┘
+                           │
+                           ▼ docker pull
+              Cualquier máquina con Docker
+```
+
+### ¿Qué automatiza el pipeline?
+
+Cada push a `main` desencadena automáticamente:
+
+1. **Checkout** del código del repositorio
+2. **Login** a DockerHub usando secrets seguros
+3. **Build** de las tres imágenes en paralelo
+4. **Tag dual** con `latest` y SHA del commit (para trazabilidad)
+5. **Push** de las imágenes a DockerHub
+6. **Notificación** del resultado
+
+**Tiempo del pipeline:** ~45 segundos con caché habilitado.
+
 ---
 
 ## Endpoints de la API
