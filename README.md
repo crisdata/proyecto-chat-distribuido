@@ -4,8 +4,8 @@
 > humanos con una compañera virtual empática llamada **Lumi**, todo ejecutado
 > localmente sin enviar datos a servicios externos.
 
-**Autores:** Cristian Giraldo & Sebastián Pérez
-**Curso:** Programación Distribuida — COTECNOVA
+**Autores:** Cristian Giraldo & Sebastián Pérez  
+**Curso:** Programación Distribuida — COTECNOVA  
 **Repositorio:** https://github.com/crisdata/proyecto-chat-distribuido
 
 [![Build Status](https://github.com/crisdata/proyecto-chat-distribuido/actions/workflows/docker.yml/badge.svg)](https://github.com/crisdata/proyecto-chat-distribuido/actions)
