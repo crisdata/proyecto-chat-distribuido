@@ -63,13 +63,19 @@ reset-db:  ## Borra solo mensajes y usuarios para una demo limpia
 	@echo "Base de datos limpiada y API reiniciada."
 
 pull-model:  ## Descarga el modelo Ollama (conecta y desconecta de la red publica)
-	@echo "Conectando Ollama a la red publica temporalmente..."
-	docker network connect proyecto1_public_network chat_ollama || true
-	@echo "Descargando modelo llama3.2:3b (puede tardar varios minutos)..."
-	docker exec -it chat_ollama ollama pull llama3.2:3b
-	@echo "Desconectando Ollama de la red publica..."
-	docker network disconnect proyecto1_public_network chat_ollama || true
-	@echo "Modelo descargado y Ollama aislado de nuevo."
+	@NETWORK_NAME=$$(docker network ls --format "{{.Name}}" | grep public_network | head -1); \
+	if [ -z "$$NETWORK_NAME" ]; then \
+		echo "ERROR: No se encontro ninguna red 'public_network'. Asegurate de que el sistema este corriendo (make up)."; \
+		exit 1; \
+	fi; \
+	echo "Red detectada: $$NETWORK_NAME"; \
+	echo "Conectando Ollama a la red publica temporalmente..."; \
+	docker network connect $$NETWORK_NAME chat_ollama || true; \
+	echo "Descargando modelo llama3.2:3b (puede tardar varios minutos)..."; \
+	docker exec -it chat_ollama ollama pull llama3.2:3b; \
+	echo "Desconectando Ollama de la red publica..."; \
+	docker network disconnect $$NETWORK_NAME chat_ollama || true; \
+	echo "Modelo descargado y Ollama aislado de nuevo."; \
 	docker exec chat_ollama ollama list
 
 	# ── Comandos de mantenimiento y limpieza ──────────────────────────────
@@ -129,14 +135,21 @@ prod-pull: ## Descarga las imágenes más recientes desde DockerHub
 	docker compose -f docker-compose.prod.yml pull
 
 prod-pull-model: ## Descarga el modelo de IA llama3.2:3b en producción
-	@echo "Conectando Ollama a internet temporalmente..."
-	docker network connect proyecto1_public_network chat_ollama || true
-	@echo "Descargando modelo llama3.2:3b (puede tardar varios minutos)..."
-	docker exec -it chat_ollama ollama pull llama3.2:3b
-	@echo "Desconectando Ollama de internet..."
-	docker network disconnect proyecto1_public_network chat_ollama || true
-	@echo ""
-	@echo "Modelo descargado. Lumi ya puede responder con la IA."
+	prod-pull-model: ## Descarga el modelo de IA llama3.2:3b en producción
+	@NETWORK_NAME=$$(docker network ls --format "{{.Name}}" | grep public_network | head -1); \
+	if [ -z "$$NETWORK_NAME" ]; then \
+		echo "ERROR: No se encontro ninguna red 'public_network'. Asegurate de que el sistema este corriendo (make prod-up)."; \
+		exit 1; \
+	fi; \
+	echo "Red detectada: $$NETWORK_NAME"; \
+	echo "Conectando Ollama a internet temporalmente..."; \
+	docker network connect $$NETWORK_NAME chat_ollama || true; \
+	echo "Descargando modelo llama3.2:3b (puede tardar varios minutos)..."; \
+	docker exec -it chat_ollama ollama pull llama3.2:3b; \
+	echo "Desconectando Ollama de internet..."; \
+	docker network disconnect $$NETWORK_NAME chat_ollama || true; \
+	echo ""; \
+	echo "Modelo descargado. Lumi ya puede responder con la IA."
 
 prod-logs: ## Muestra logs del sistema en producción
 	docker compose -f docker-compose.prod.yml logs -f --tail=100
