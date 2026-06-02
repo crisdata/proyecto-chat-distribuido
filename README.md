@@ -4,7 +4,7 @@
 > humanos con una compañera virtual empática llamada **Lumi**, todo ejecutado
 > localmente sin enviar datos a servicios externos.
 
-**Autores:** Cristian David Giraldo & Juan Sebastián Pérez Guzmán
+**Autores:** Cristian Giraldo & Sebastián Pérez
 **Curso:** Programación Distribuida — COTECNOVA
 **Repositorio:** https://github.com/crisdata/proyecto-chat-distribuido
 
@@ -593,15 +593,20 @@ es mediante Swagger UI en http://localhost/api/docs.**
 | GET | `/usuarios/me` | JWT | Datos del usuario autenticado |
 | GET | `/usuarios/{id}/presencia` | No | Estado de conexión de un usuario |
 | POST | `/usuarios/presencia/bulk` | No | Estado de conexión de varios usuarios |
-| POST | `/mensaje_privado` | JWT | Enviar mensaje privado |
+| POST | `/mensaje_privado` | No | Enviar mensaje privado |
 | GET | `/conversacion/{id}` | No | Historial de mensajes recibidos |
 | GET | `/conversacion/{id}/{contacto_id}` | No | Conversación bilateral completa |
 | GET | `/no_leidos/{id}` | No | Mensajes no leídos por contacto |
 | DELETE | `/no_leidos/{id}/{contacto}` | No | Marcar conversación como leída |
-| POST | `/ia/mensaje` | JWT | Enviar mensaje a Lumi |
+| POST | `/ia/mensaje` | No | Enviar mensaje a Lumi |
 | GET | `/ia/estado` | No | Verificar disponibilidad de Lumi |
 | POST | `/interno/notificar` | Worker secret | Endpoint interno (usado por el worker) |
 | WS | `/ws/{usuario_id}?token=<jwt>` | JWT | Conexión WebSocket en tiempo real |
+
+> 💡 **El frontend envía el token JWT en estos endpoints y la conexión WebSocket
+> sí valida el token. La verificación estricta en el cuerpo de `/mensaje_privado`
+> y `/ia/mensaje` está contemplada como refuerzo de seguridad para una
+> siguiente iteración.**
 
 ### Ejemplos prácticos con cURL
 

@@ -57,8 +57,8 @@ clean:  ## Detiene los servicios y borra TODOS los datos (BD, modelo IA, etc)
 	@echo "Sistema reseteado completamente."
 
 reset-db:  ## Borra solo mensajes y usuarios para una demo limpia
-	docker exec -it chat_db mariadb -u chat_user -pchat1234 chat_db \
-		-e "DELETE FROM mensajes; DELETE FROM usuarios;"
+	docker exec chat_db sh -c 'mariadb -u root -p"$$MYSQL_ROOT_PASSWORD" "$$MYSQL_DATABASE" \
+		-e "DELETE FROM mensajes; DELETE FROM usuarios;"'
 	docker compose restart api
 	@echo "Base de datos limpiada y API reiniciada."
 
@@ -135,7 +135,6 @@ prod-pull: ## Descarga las imágenes más recientes desde DockerHub
 	docker compose -f docker-compose.prod.yml pull
 
 prod-pull-model: ## Descarga el modelo de IA llama3.2:3b en producción
-	prod-pull-model: ## Descarga el modelo de IA llama3.2:3b en producción
 	@NETWORK_NAME=$$(docker network ls --format "{{.Name}}" | grep public_network | head -1); \
 	if [ -z "$$NETWORK_NAME" ]; then \
 		echo "ERROR: No se encontro ninguna red 'public_network'. Asegurate de que el sistema este corriendo (make prod-up)."; \
@@ -145,7 +144,7 @@ prod-pull-model: ## Descarga el modelo de IA llama3.2:3b en producción
 	echo "Conectando Ollama a internet temporalmente..."; \
 	docker network connect $$NETWORK_NAME chat_ollama || true; \
 	echo "Descargando modelo llama3.2:3b (puede tardar varios minutos)..."; \
-	docker exec -it chat_ollama ollama pull llama3.2:3b; \
+	docker exec -i chat_ollama ollama pull llama3.2:3b; \
 	echo "Desconectando Ollama de internet..."; \
 	docker network disconnect $$NETWORK_NAME chat_ollama || true; \
 	echo ""; \
