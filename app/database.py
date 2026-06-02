@@ -2,6 +2,7 @@
 # Gestiona la conexión a MariaDB y la creación de tablas.
 # Usa aiomysql para conexiones asíncronas, coherente con FastAPI.
 
+import asyncio
 import aiomysql
 import os
 from dotenv import load_dotenv
@@ -23,9 +24,59 @@ pool = None
 
 
 async def conectar():
-    """Crea el pool de conexiones al iniciar la aplicación."""
+    """
+    Crea el pool de conexiones al iniciar la aplicación.
+
+    Implementa reintentos con espera para tolerar arranques lentos de
+    MariaDB. En equipos modestos, MariaDB puede tomar 20-30 segundos en
+    estar listo para aceptar conexiones, especialmente en el primer
+    arranque cuando inicializa el volumen de datos. La función incluye
+    una validación con SELECT 1 antes de marcar la conexión como exitosa.
+    """
     global pool
-    pool = await aiomysql.create_pool(**DB_CONFIG)
+
+    intentos_maximos = 10
+    espera_entre_intentos = 3  # segundos
+
+    # Logger local (database.py no declara uno propio actualmente)
+    import logging
+    log = logging.getLogger("database")
+
+    for intento in range(1, intentos_maximos + 1):
+        try:
+            log.info(
+                f"Intento {intento}/{intentos_maximos} de conexión a MariaDB..."
+            )
+            pool = await aiomysql.create_pool(**DB_CONFIG)
+
+            # Validación con SELECT 1 para confirmar conexión real,
+            # no solo que el pool se haya creado.
+            async with pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT 1")
+                    await cur.fetchone()
+
+            log.info("Conexión a MariaDB establecida correctamente")
+            return
+
+        except Exception as e:
+            if intento == intentos_maximos:
+                log.error(
+                    f"Imposible conectar a MariaDB tras "
+                    f"{intentos_maximos} intentos. Último error: {e}"
+                )
+                raise RuntimeError(
+                    f"No se pudo conectar a MariaDB tras {intentos_maximos} "
+                    f"intentos. ¿Las credenciales del .env coinciden con el "
+                    f"volumen db_data? Si no, ejecuta: "
+                    f"docker compose -f docker-compose.prod.yml down -v"
+                ) from e
+
+            log.warning(
+                f"Intento {intento} falló ({type(e).__name__}: {e}). "
+                f"Reintentando en {espera_entre_intentos}s..."
+            )
+            await asyncio.sleep(espera_entre_intentos)
 
 
 async def desconectar():

@@ -6,6 +6,7 @@
 # petición HTTP en curso, permitiendo trazar el flujo del mensaje a
 # través de la cola hasta el worker.
 
+import asyncio
 import logging
 import os
 import json
@@ -28,6 +29,12 @@ async def conectar_queue():
     """
     Crea la conexión a RabbitMQ al iniciar la aplicación.
     Se llama desde el lifespan de main.py.
+
+    Implementa reintentos con espera para tolerar arranques lentos del
+    broker. En equipos modestos, RabbitMQ puede tomar 45+ segundos en
+    estar listo para aceptar conexiones AMQP aunque el contenedor ya
+    esté Up. Esta función no se rinde al primer fallo: intenta hasta 10
+    veces con 3 segundos entre intentos.
     """
     global _conexion, _canal
 
@@ -38,11 +45,36 @@ async def conectar_queue():
         f"{os.getenv('RABBITMQ_PORT', '5672')}/"
     )
 
-    _conexion = await aio_pika.connect_robust(url)
-    _canal = await _conexion.channel()
+    intentos_maximos = 10
+    espera_entre_intentos = 3  # segundos
 
-    await _canal.declare_queue("mensajes", durable=True)
-    log.info("Cola 'mensajes' declarada en RabbitMQ")
+    for intento in range(1, intentos_maximos + 1):
+        try:
+            log.info(
+                f"Intento {intento}/{intentos_maximos} de conexión a RabbitMQ..."
+            )
+            _conexion = await aio_pika.connect_robust(url)
+            _canal = await _conexion.channel()
+            await _canal.declare_queue("mensajes", durable=True)
+            log.info("Cola 'mensajes' declarada en RabbitMQ")
+            return
+
+        except Exception as e:
+            if intento == intentos_maximos:
+                log.error(
+                    f"Imposible conectar a RabbitMQ tras "
+                    f"{intentos_maximos} intentos. Último error: {e}"
+                )
+                raise RuntimeError(
+                    f"No se pudo conectar a RabbitMQ tras {intentos_maximos} "
+                    f"intentos. ¿El broker está corriendo?"
+                ) from e
+
+            log.warning(
+                f"Intento {intento} falló ({type(e).__name__}: {e}). "
+                f"Reintentando en {espera_entre_intentos}s..."
+            )
+            await asyncio.sleep(espera_entre_intentos)
 
 
 async def desconectar_queue():
