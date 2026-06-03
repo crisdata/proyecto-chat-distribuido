@@ -299,7 +299,13 @@ La aplicación y la documentación de la API están siempre disponibles:
 | Swagger (API) | http://localhost/api/docs | Probar los endpoints desde el navegador |
 | ReDoc (API) | http://localhost/api/redoc | Documentación legible de la API |
 
-Las cuatro herramientas de monitoreo están **desactivadas por defecto** y se
+RabbitMQ Management queda disponible siempre para inspeccionar el broker:
+
+| Herramienta | URL | Credenciales | Para qué sirve |
+|---|---|---|---|
+| RabbitMQ Management | http://localhost:15672 | usuario y clave del `.env` | Ver colas, conexiones y tráfico del broker |
+
+Las demás herramientas de monitoreo están **desactivadas por defecto** y se
 activan con un *profile* de Docker Compose. Para levantarlas (por ejemplo, para
 la sustentación):
 
@@ -309,17 +315,16 @@ la sustentación):
 docker compose -f docker-compose.prod.yml --profile observability up -d
 ```
 
-Con el profile activo quedan disponibles:
+Con el profile activo también quedan disponibles:
 
 | Herramienta | URL | Credenciales | Para qué sirve |
 |---|---|---|---|
 | Dozzle | http://localhost:9999 | (ninguna) | Logs de todos los contenedores en vivo |
-| RabbitMQ Management | http://localhost:15672 | usuario y clave del `.env` | Ver colas, conexiones y tráfico del broker |
 | Redis Commander | http://localhost:8081 | (ninguna) | Explorar las claves de Redis |
 | Portainer | http://localhost:9000 | se crean al primer ingreso | Administrar contenedores y volúmenes |
 
-> Las herramientas de monitoreo no deben exponerse en internet sin protección
-> adicional. Están pensadas para uso local y evaluación.
+> Las herramientas de administración y monitoreo no deben exponerse en internet
+> sin protección adicional. Están pensadas para uso local y evaluación.
 
 ---
 
@@ -400,8 +405,8 @@ docker compose -f docker-compose.prod.yml down -v
 El sistema tiene 10 contenedores en 3 redes con niveles crecientes de
 aislamiento:
 
-- **public_network** — Única capa accesible desde el navegador. Contiene el
-  frontend (Nginx) y la API.
+- **public_network** — Capa accesible desde el navegador. Contiene el frontend
+  (Nginx), la API y la consola RabbitMQ Management.
 - **app_network** — Capa de mensajería (RabbitMQ y worker). Marcada como
   `internal`: sin salida a internet.
 - **data_network** — Capa de datos (MariaDB, Redis, Ollama). También `internal`:

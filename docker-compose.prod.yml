@@ -17,13 +17,16 @@
 #
 #   docker compose -f docker-compose.prod.yml --profile observability up -d
 #
-# Accesos adicionales con el profile activo:
+# RabbitMQ Management queda disponible siempre para inspeccionar el broker:
 #   - http://localhost:15672     → RabbitMQ Management (user/pass del .env)
+#
+# Accesos adicionales con el profile activo:
 #   - http://localhost:8081      → Redis Commander
 #   - http://localhost:9999      → Dozzle (logs en vivo)
 #   - http://localhost:9000      → Portainer
 #
-# Para un deploy real en internet, NO usar --profile observability.
+# Para un deploy real en internet, no exponer herramientas de administración
+# sin protección adicional.
 
 services:
   # ── Frontend React + Nginx ────────────────────────────────────────────
