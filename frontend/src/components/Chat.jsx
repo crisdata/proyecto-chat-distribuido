@@ -26,6 +26,7 @@ export default function Chat({
 	const [texto, setTexto] = useState("");
 	const [enviando, setEnviando] = useState(false);
 	const [cargando, setCargando] = useState(true);
+	const [modoAutodestructivo, setModoAutodestructivo] = useState(false);
 	const finalRef = useRef(null);
 	const esIA = contacto.id === iaId;
 
@@ -69,10 +70,11 @@ export default function Chat({
 		setTexto("");
 
 		try {
+			const expiraEn = modoAutodestructivo ? 30 : null; // 30 segundos para autodestrucción
 			if (esIA) {
 				await enviarMensajeIA(usuarioActual.id, iaId, contenido);
 			} else {
-				await enviarMensaje(usuarioActual.id, contacto.id, contenido);
+				await enviarMensaje(usuarioActual.id, contacto.id, contenido, expiraEn);
 			}
 			await cargarConversacion();
 		} catch (error) {
@@ -237,12 +239,18 @@ export default function Chat({
                       flex items-end gap-3"
 			>
 				<button
-					title="Mensaje autodestructivo (próximamente)"
-					disabled
-					className="w-10 h-10 rounded-xl bg-vibe-800 text-vibe-600
-                     flex items-center justify-center
-                     hover:bg-vibe-700 hover:text-cyan-400 transition
-                     disabled:cursor-not-allowed"
+					title={
+						modoAutodestructivo
+							? "Desactivar mensaje autodestructivo"
+							: "Mensaje autodestructivo (30s)"
+					}
+					onClick={() => setModoAutodestructivo((prev) => !prev)}
+					className={`w-10 h-10 rounded-xl flex items-center justify-center
+                     transition ${
+												modoAutodestructivo
+													? "bg-red-500/20 text-red-400 shadow-glow-red"
+													: "bg-vibe-800 text-vibe-600 hover:bg-vibe-700 hover:text-cyan-400"
+}`}
 				>
 					<Flame size={18} />
 				</button>
@@ -251,15 +259,22 @@ export default function Chat({
 					value={texto}
 					onChange={(e) => setTexto(e.target.value)}
 					onKeyDown={handleKeyDown}
-					placeholder="Escribe un mensaje..."
+					placeholder={
+						modoAutodestructivo
+							? "Mensaje autodestructivo (30s)..."
+							: "Escribe un mensaje..."
+					}
 					rows={1}
 					disabled={enviando}
-					className="flex-1 px-4 py-2.5 rounded-2xl bg-vibe-800
-                     border border-vibe-700 text-sm text-vibe-100
-                     placeholder-vibe-500 outline-none resize-none
-                     focus:ring-2 focus:ring-cyan-500
-                     focus:border-transparent transition
-                     disabled:opacity-50 max-h-32 overflow-y-auto"
+					className={`flex-1 px-4 py-2.5 rounded-2xl
+                     border text-sm outline-none resize-none
+                     transition
+                     disabled:opacity-50 max-h-32 overflow-y-auto
+                     ${
+												modoAutodestructivo
+													? "bg-red-500/5 border-red-500/40 text-red-100 placeholder-red-400/50 focus:ring-2 focus:ring-red-500"
+													: "bg-vibe-800 border-vibe-700 text-vibe-100 placeholder-vibe-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+}`}
 				/>
 				<button
 					onClick={handleEnviar}

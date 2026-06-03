@@ -1,7 +1,10 @@
 // Mensaje.jsx
 // Burbuja individual de mensaje. Avatar del emisor con gradiente único.
+// Si el mensaje tiene expira_en, muestra un contador regresivo y se
+// auto-elimina visualmente al expirar.
 
-import { Bot } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Bot, Timer } from "lucide-react";
 import { formatearHora } from "../utils/tiempo";
 import { getAvatarStyle } from "../utils/avatarColors";
 
@@ -13,6 +16,41 @@ export default function Mensaje({
 }) {
 	const esEnviado = mensaje.emisor_id === usuarioActual.id;
 	const esIA = mensaje.emisor_id === iaId;
+	const esAutodestructivo = !!mensaje.expira_en;
+
+	// Contador regresivo para mensajes autodestructivos
+	const [segundosRestantes, setSegundosRestantes] = useState(() => {
+		if (!mensaje.expira_en) return null;
+		const expira = new Date(mensaje.expira_en).getTime();
+		const ahora = Date.now();
+		return Math.max(0, Math.floor((expira - ahora) / 1000));
+	});
+
+	const [visible, setVisible] = useState(true);
+
+	useEffect(() => {
+		if (!esAutodestructivo || segundosRestantes === null) return;
+
+		if (segundosRestantes <= 0) {
+			setVisible(false);
+			return;
+		}
+
+		const intervalo = setInterval(() => {
+			setSegundosRestantes((prev) => {
+				if (prev === null || prev <= 1) {
+					clearInterval(intervalo);
+					setTimeout(() => setVisible(false), 400);
+					return 0;
+				}
+				return prev - 1;
+			});
+		}, 1000);
+
+		return () => clearInterval(intervalo);
+	}, [esAutodestructivo]);
+
+	if (!visible) return null;
 
 	return (
 		<div
@@ -39,20 +77,25 @@ export default function Mensaje({
 			<div
 				className={`max-w-xs lg:max-w-md px-4 py-2.5 rounded-2xl
                        shadow-bubble text-sm leading-relaxed
+                       ${esAutodestructivo ? "border-2 border-red-500/50" : ""}
                        ${
 													esEnviado
 														? "bg-gradient-vibe text-white rounded-br-sm"
-														: esIA
-															? "bg-vibe-700 text-vibe-100 rounded-bl-sm border-l-2 border-lumi-400"
-															: "bg-vibe-700 text-vibe-100 rounded-bl-sm"
-}`}
+														: "bg-vibe-700 text-vibe-100 rounded-bl-sm"
+}${esIA && !esEnviado ? " border-l-2 border-lumi-400" : ""}`}
 			>
 				<p className="whitespace-pre-wrap break-words">{mensaje.contenido}</p>
 
 				<p
-					className={`text-xs mt-1 text-right
+					className={`text-xs mt-1 flex items-center justify-end gap-1
                        ${esEnviado ? "text-white/60" : "text-vibe-500"}`}
 				>
+					{segundosRestantes !== null && (
+						<span className="flex items-center gap-0.5 text-red-400">
+							<Timer size={10} />
+							{segundosRestantes}s
+						</span>
+					)}
 					{formatearHora(mensaje.timestamp)}
 				</p>
 			</div>

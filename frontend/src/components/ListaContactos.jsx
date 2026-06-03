@@ -9,6 +9,7 @@ import { Search, Bot, User, PenSquare } from "lucide-react";
 import { formatearHora } from "../utils/tiempo";
 import { getAvatarStyle } from "../utils/avatarColors";
 import IndicadorPresencia from "./IndicadorPresencia";
+import ModalNuevoChat from "./ModalNuevoChat";
 
 export default function ListaContactos({
 	contactos,
@@ -20,6 +21,7 @@ export default function ListaContactos({
 	noLeidos = { total: 0, porContacto: {} },
 }) {
 	const [busqueda, setBusqueda] = useState("");
+	const [mostrarModalNuevoChat, setMostrarModalNuevoChat] = useState(false);
 
 	const { lumi, humanos } = useMemo(() => {
 		const filtroBusqueda = (c) =>
@@ -174,6 +176,7 @@ export default function ListaContactos({
 
 			<div className="p-4 border-t border-vibe-800">
 				<button
+					onClick={() => setMostrarModalNuevoChat(true)}
 					className="w-full py-3 rounded-xl bg-gradient-vibe
                            text-white text-sm font-semibold transition
                            shadow-glow-cyan hover:opacity-90 active:scale-[0.98]
@@ -183,6 +186,17 @@ export default function ListaContactos({
 					Nuevo chat
 				</button>
 			</div>
+
+			{/* Modal para nuevo chat */}
+			{mostrarModalNuevoChat && (
+				<ModalNuevoChat
+					usuarioActual={usuarioActual}
+					iaId={iaId}
+					contactosExistentes={contactos}
+					onSeleccionar={onSeleccionar}
+					onCerrar={() => setMostrarModalNuevoChat(false)}
+				/>
+			)}
 		</div>
 	);
 }

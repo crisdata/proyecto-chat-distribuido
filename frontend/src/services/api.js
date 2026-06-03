@@ -85,14 +85,22 @@ export async function obtenerUsuarioActual() {
 
 // ── Mensajes ──────────────────────────────────────────────────────────────
 
-export async function enviarMensaje(emisor_id, receptor_id, contenido) {
+export async function enviarMensaje(
+	emisor_id,
+	receptor_id,
+	contenido,
+	expiraEn = null,
+) {
+	const body = { emisor_id, receptor_id, contenido };
+	if (expiraEn !== null) body.expira_en = expiraEn;
+
 	const res = await fetch(`${BASE_URL}/mensaje_privado`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
 			...authHeaders(),
 		},
-		body: JSON.stringify({ emisor_id, receptor_id, contenido }),
+		body: JSON.stringify(body),
 	});
 	if (!res.ok) {
 		const error = await res.json();
