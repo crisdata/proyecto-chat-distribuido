@@ -24,9 +24,31 @@ on:
 
 jobs:
 
+  # ── Tests automatizados ─────────────────────────────────────────────────
+  tests:
+    name: Ejecutar pruebas
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Instalar dependencias de test
+        run: pip install -r requirements-dev.txt
+
+      - name: Ejecutar pytest
+        run: pytest -q
+
   # ── Build de la imagen de la API ────────────────────────────────────────
   build-api:
     name: Build y push de la API
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - name: Descargar código del repositorio
@@ -56,6 +78,7 @@ jobs:
   # ── Build de la imagen del Worker ───────────────────────────────────────
   build-worker:
     name: Build y push del Worker
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - name: Descargar código del repositorio
@@ -85,6 +108,7 @@ jobs:
   # ── Build de la imagen del Frontend ─────────────────────────────────────
   build-frontend:
     name: Build y push del Frontend
+    needs: tests
     runs-on: ubuntu-latest
     steps:
       - name: Descargar código del repositorio
