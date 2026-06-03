@@ -128,7 +128,12 @@ export default function Chat({
 			if (esGrupo) {
 				await enviarMensajeGrupo(contacto.id, contenido);
 			} else if (esIA) {
-				const respuesta = await enviarMensajeIA(usuarioActual.id, iaId, contenido, modo);
+				const respuesta = await enviarMensajeIA(
+					usuarioActual.id,
+					iaId,
+					contenido,
+					modo,
+				);
 				if (esSinMemoria) {
 					setMensajesLocales((prev) => [
 						...prev,
@@ -199,7 +204,11 @@ export default function Chat({
 						usuarioActual={usuarioActual}
 						iaId={iaId}
 						nombreEmisor={
-							esGrupo ? (mensaje.emisor_nombre || null) : (mensaje.emisor_id === contacto.id ? contacto.nombre : null)
+							esGrupo
+								? mensaje.emisor_nombre || null
+								: mensaje.emisor_id === contacto.id
+									? contacto.nombre
+									: null
 						}
 					/>
 				</div>

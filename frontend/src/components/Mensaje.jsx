@@ -89,7 +89,7 @@ export default function Mensaje({
 														? "bg-gradient-vibe text-white rounded-br-sm"
 														: "bg-vibe-700 text-vibe-100 rounded-bl-sm"
 }${esIA && !esEnviado ? " border-l-2 border-lumi-400" : ""}`}
-			>
+				>
 					<p className="whitespace-pre-wrap break-words">{mensaje.contenido}</p>
 
 					<p
