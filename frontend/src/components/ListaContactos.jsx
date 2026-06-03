@@ -13,8 +13,10 @@ import ModalNuevoChat from "./ModalNuevoChat";
 
 export default function ListaContactos({
 	contactos,
+	grupos = [],
 	contactoActivo,
 	onSeleccionar,
+	onSeleccionarGrupo,
 	usuarioActual,
 	iaId,
 	presencias = {},
@@ -161,7 +163,35 @@ export default function ListaContactos({
 					</>
 				)}
 
-				{humanos.length === 0 && !lumi ? (
+				{/* Grupos unidos */}
+				{grupos.map((grupo) => {
+					const activo = contactoActivo?.tipo === "grupo" && contactoActivo?.id === grupo.id;
+					return (
+						<button key={grupo.id}
+							onClick={() => onSeleccionarGrupo?.(grupo)}
+							className={`w-full flex items-center gap-3 px-4 py-3
+								transition text-left border-b border-vibe-800/50
+								${activo ? "bg-cyan-500/10 border-l-4 border-l-cyan-500"
+									: "hover:bg-vibe-800/50"}`}>
+							<div className="w-11 h-11 rounded-full bg-cyan-500/15
+								flex items-center justify-center flex-shrink-0">
+								<Users size={20} className="text-cyan-400" />
+							</div>
+							<div className="flex-1 min-w-0">
+								<span className={`text-sm font-medium truncate
+									${activo ? "text-cyan-400" : "text-vibe-200"}`}>
+									{grupo.nombre}
+								</span>
+								<p className="text-xs text-vibe-500">Grupo público</p>
+							</div>
+						</button>
+					);
+				})}
+				{grupos.length > 0 && humanos.length > 0 && (
+					<div className="my-2 mx-4 h-px bg-vibe-700/60" />
+				)}
+
+				{humanos.length === 0 && !lumi && grupos.length === 0 ? (
 					<div
 						className="flex flex-col items-center justify-center
                           h-40 text-vibe-500 text-sm gap-2"
@@ -193,6 +223,7 @@ export default function ListaContactos({
 					usuarioActual={usuarioActual}
 					iaId={iaId}
 					onSeleccionar={onSeleccionar}
+					onSeleccionarGrupo={onSeleccionarGrupo}
 					onCerrar={() => setMostrarModalNuevoChat(false)}
 				/>
 			)}

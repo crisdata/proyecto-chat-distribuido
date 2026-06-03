@@ -19,6 +19,7 @@ import {
 	marcarComoLeidos,
 	crearWebSocket,
 	setToken,
+	gruposMios,
 } from "./services/api";
 import { usePresencia } from "./hooks/usePresencia";
 
@@ -27,6 +28,7 @@ export default function App() {
 	const [contactos, setContactos] = useState([]);
 	const [contactoActivo, setContactoActivo] = useState(null);
 	const [iaId, setIaId] = useState(null);
+	const [grupos, setGrupos] = useState([]);
 	const [cargandoSesion, setCargandoSesion] = useState(true);
 	const [noLeidos, setNoLeidos] = useState({ total: 0, porContacto: {} });
 	const [actualizacionMensajes, setActualizacionMensajes] = useState(0);
@@ -84,6 +86,24 @@ export default function App() {
 
 		cargarDatos();
 		const intervalo = setInterval(cargarDatos, 10000);
+		return () => clearInterval(intervalo);
+	}, [usuario]);
+
+	// Polling de grupos unidos cada 10s
+	useEffect(() => {
+		if (!usuario) return;
+
+		async function cargarGrupos() {
+			try {
+				const data = await gruposMios();
+				setGrupos(data);
+			} catch (e) {
+				console.error("Error al cargar grupos:", e);
+			}
+		}
+
+		cargarGrupos();
+		const intervalo = setInterval(cargarGrupos, 10000);
 		return () => clearInterval(intervalo);
 	}, [usuario]);
 
@@ -180,6 +200,7 @@ export default function App() {
 		setIaId(null);
 		setNoLeidos({ total: 0, porContacto: {} });
 		setActualizacionMensajes(0);
+		setGrupos([]);
 		huellaContactosRef.current = "";
 	}
 
@@ -215,8 +236,10 @@ export default function App() {
 
 			<ListaContactos
 				contactos={contactos}
+				grupos={grupos}
 				contactoActivo={contactoActivo}
 				onSeleccionar={handleSeleccionarContacto}
+				onSeleccionarGrupo={handleSeleccionarGrupo}
 				usuarioActual={usuario}
 				iaId={iaId}
 				presencias={presencias}

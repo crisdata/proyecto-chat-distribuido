@@ -3,12 +3,14 @@
 // Header muestra estado de presencia real (En línea / Activo hace X / Reposando).
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Bot, User, Loader, Shield, Flame } from "lucide-react";
+import { Send, Bot, User, Loader, Shield, Flame, Users } from "lucide-react";
 import Mensaje from "./Mensaje";
 import {
 	enviarMensaje,
 	enviarMensajeIA,
 	obtenerConversacionBilateral,
+	mensajesGrupo,
+	enviarMensajeGrupo,
 } from "../services/api";
 import { esHoy } from "../utils/tiempo";
 import { getAvatarStyle } from "../utils/avatarColors";
@@ -29,6 +31,7 @@ export default function Chat({
 	const [modoAutodestructivo, setModoAutodestructivo] = useState(false);
 	const finalRef = useRef(null);
 	const esIA = contacto.id === iaId;
+	const esGrupo = contacto.tipo === "grupo";
 
 	// Presencia del contacto que estoy viendo
 	const presencia = presencias[contacto.id];
@@ -37,10 +40,15 @@ export default function Chat({
 
 	const cargarConversacion = useCallback(async () => {
 		try {
-			const data = await obtenerConversacionBilateral(
-				usuarioActual.id,
-				contacto.id,
-			);
+			let data;
+			if (esGrupo) {
+				data = await mensajesGrupo(contacto.id);
+			} else {
+				data = await obtenerConversacionBilateral(
+					usuarioActual.id,
+					contacto.id,
+				);
+			}
 			setMensajes(data);
 		} catch (error) {
 			console.error("Error al cargar mensajes:", error);
@@ -70,10 +78,12 @@ export default function Chat({
 		setTexto("");
 
 		try {
-			const expiraEn = modoAutodestructivo ? 30 : null; // 30 segundos para autodestrucción
-			if (esIA) {
+			if (esGrupo) {
+				await enviarMensajeGrupo(contacto.id, contenido);
+			} else if (esIA) {
 				await enviarMensajeIA(usuarioActual.id, iaId, contenido);
 			} else {
+				const expiraEn = modoAutodestructivo ? 30 : null;
 				await enviarMensaje(usuarioActual.id, contacto.id, contenido, expiraEn);
 			}
 			await cargarConversacion();
@@ -126,6 +136,7 @@ export default function Chat({
 
 	// Texto descriptivo del estado del contacto en el header
 	function getTextoEstado() {
+		if (esGrupo) return "Grupo público";
 		if (esIA) {
 			if (estado === "online")
 				return `Modelo: ${import.meta.env.VITE_OLLAMA_MODEL || "llama3.2:3b"}`;
@@ -143,6 +154,7 @@ export default function Chat({
 
 	// Color del texto según el estado
 	function getColorEstado() {
+		if (esGrupo) return "text-cyan-400";
 		if (estado === "online") return esIA ? "text-lumi-400" : "text-online-400";
 		if (estado === "reposando") return "text-amber-400";
 		return "text-vibe-500";
@@ -153,20 +165,26 @@ export default function Chat({
 			{/* Encabezado de la conversación */}
 			<div
 				className="bg-vibe-950 border-b border-vibe-800 px-6 py-4
-                      flex items-center gap-3"
+					flex items-center gap-3"
 			>
-				{/* Avatar del contacto con indicador de presencia */}
+				{/* Avatar o ícono de grupo */}
+				{esGrupo ? (
+					<div className="w-10 h-10 rounded-full bg-cyan-500/15 flex items-center justify-center flex-shrink-0">
+						<Users size={20} className="text-cyan-400" />
+					</div>
+				) : (
 				<div className="relative flex-shrink-0">
 					<div
 						style={getAvatarStyle(contacto.nombre, esIA)}
 						className={`w-10 h-10 rounded-full flex items-center justify-center
-                        font-semibold
-                        ${esIA ? "text-white" : ""}`}
+						font-semibold
+						${esIA ? "text-white" : ""}`}
 					>
 						{esIA ? <Bot size={20} /> : contacto.nombre.charAt(0).toUpperCase()}
 					</div>
 					<IndicadorPresencia estado={estado} tamano="sm" />
 				</div>
+				)}
 
 				<div className="flex-1">
 					<h3 className="font-semibold text-vibe-100 text-sm">
@@ -205,19 +223,24 @@ export default function Chat({
 					>
 						<div
 							className={`w-16 h-16 rounded-full flex items-center
-                              justify-center
-                              ${esIA ? "bg-lumi-400/15" : "bg-cyan-500/15"}`}
+								justify-center
+								${esGrupo ? "bg-cyan-500/15"
+								: esIA ? "bg-lumi-400/15" : "bg-cyan-500/15"}`}
 						>
-							{esIA ? (
+							{esGrupo ? (
+								<Users size={32} className="text-cyan-400" />
+							) : esIA ? (
 								<Bot size={32} className="text-lumi-400" />
 							) : (
 								<User size={32} className="text-cyan-400" />
 							)}
 						</div>
 						<p className="text-sm font-medium text-vibe-300">
-							{esIA
-								? "¡Hola! Soy Lumi, tu compañera virtual. ¿En qué puedo acompañarte?"
-								: `Inicia una conversación con ${contacto.nombre}`}
+							{esGrupo
+								? `Bienvenido a ${contacto.nombre}`
+								: esIA
+									? "¡Hola! Soy Lumi, tu compañera virtual. ¿En qué puedo acompañarte?"
+									: `Inicia una conversación con ${contacto.nombre}`}
 						</p>
 					</div>
 				) : (
