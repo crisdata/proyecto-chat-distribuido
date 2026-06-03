@@ -39,6 +39,7 @@ export default function Chat({
 }) {
 	const [mensajes, setMensajes] = useState([]);
 	const [texto, setTexto] = useState("");
+	const [aviso, setAviso] = useState("");
 	const [enviando, setEnviando] = useState(false);
 	const [cargando, setCargando] = useState(true);
 	const [modoAutodestructivo, setModoAutodestructivo] = useState(false);
@@ -75,6 +76,7 @@ export default function Chat({
 
 	useEffect(() => {
 		setMensajesLocales([]);
+		setAviso("");
 		setModo(contacto.modoInicial || "con_memoria");
 	}, [contacto.id, contacto.modoInicial]);
 
@@ -122,6 +124,7 @@ export default function Chat({
 		if (!contenido || enviando) return;
 
 		setEnviando(true);
+		setAviso("");
 		setTexto("");
 
 		try {
@@ -148,7 +151,19 @@ export default function Chat({
 					]);
 				}
 			} else if (esSinMemoria && !esIA) {
-				await enviarMensajeSinMemoria(usuarioActual.id, contacto.id, contenido);
+				const respuesta = await enviarMensajeSinMemoria(
+					usuarioActual.id,
+					contacto.id,
+					contenido,
+				);
+				if (!respuesta.entregado) {
+					setTexto(contenido);
+					setAviso(
+						respuesta.mensaje ||
+							"No se pudo entregar el mensaje sin memoria en vivo.",
+					);
+					return;
+				}
 				setMensajesLocales((prev) => [
 					...prev,
 					{
@@ -296,6 +311,7 @@ export default function Chat({
 						title={esSinMemoria ? "Modo sin memoria" : "Modo con memoria"}
 						onClick={() => {
 							setMensajesLocales([]);
+							setAviso("");
 							setModo(esSinMemoria ? "con_memoria" : "sin_memoria");
 						}}
 						className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
@@ -366,10 +382,13 @@ export default function Chat({
 			</div>
 
 			{/* Input de mensaje */}
-			<div
-				className="bg-vibe-950 border-t border-vibe-800 px-4 py-3
-                      flex items-end gap-3"
-			>
+			<div className="bg-vibe-950 border-t border-vibe-800 px-4 py-3">
+				{aviso && (
+					<p className="mb-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+						{aviso}
+					</p>
+				)}
+				<div className="flex items-end gap-3">
 				<button
 					title={
 						modoAutodestructivo
@@ -389,7 +408,10 @@ export default function Chat({
 
 				<textarea
 					value={texto}
-					onChange={(e) => setTexto(e.target.value)}
+					onChange={(e) => {
+						setTexto(e.target.value);
+						setAviso("");
+					}}
 					onKeyDown={handleKeyDown}
 					placeholder={
 						modoAutodestructivo
@@ -424,6 +446,7 @@ export default function Chat({
 						<Send size={18} />
 					)}
 				</button>
+				</div>
 			</div>
 		</div>
 	);
