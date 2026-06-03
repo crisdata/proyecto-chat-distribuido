@@ -173,6 +173,30 @@ class UnirseGrupoResponse(BaseModel):
     grupo_id: str
 
 
+class MensajeSinMemoriaCreate(BaseModel):
+    """Datos para enviar un mensaje sin memoria."""
+    emisor_id: str
+    receptor_id: str
+    contenido: str
+
+    @field_validator("contenido")
+    @classmethod
+    def validar_contenido(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError("El contenido del mensaje no puede estar vacío.")
+        if len(v) > 2000:
+            raise ValueError("El mensaje no puede superar los 2000 caracteres.")
+        return v
+
+
+class MensajeSinMemoriaResponse(BaseModel):
+    """Respuesta al envío de un mensaje sin memoria."""
+    entregado: bool
+    modo: str = "sin_memoria"
+    mensaje: str = ""
+
+
 # ── Respuestas generales ──────────────────────────────────────────────────────
 
 class RespuestaExito(BaseModel):

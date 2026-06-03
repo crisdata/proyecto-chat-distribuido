@@ -15,7 +15,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.models import (
     MensajeCreate, MensajeResponse,
-    NoLeidosResponse
+    NoLeidosResponse,
+    MensajeSinMemoriaCreate, MensajeSinMemoriaResponse,
 )
 from app.database import get_connection, release_connection
 from app.cache import (
@@ -202,6 +203,64 @@ async def consultar_conversacion(
             for m in mensajes
         ]
 
+    finally:
+        await release_connection(conn)
+
+
+@router.post(
+    "/mensaje_privado/sin_memoria",
+    response_model=MensajeSinMemoriaResponse,
+    status_code=200,
+)
+async def enviar_mensaje_sin_memoria(
+    datos: MensajeSinMemoriaCreate,
+    payload: dict = Depends(autenticar_usuario_actual),
+):
+    """
+    Envía un mensaje sin memoria: sin persistencia, sin Redis, sin RabbitMQ.
+
+    Solo se entrega vía WebSocket si el receptor está conectado.
+    Si no, se informa que no fue posible la entrega en vivo.
+    """
+    if datos.emisor_id != payload["sub"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    conn = await get_connection()
+    try:
+        # Validar que emisor y receptor existen
+        nombre_emisor = await validar_usuario(datos.emisor_id, conn)
+        if not nombre_emisor:
+            raise HTTPException(status_code=404, detail="Emisor no encontrado.")
+
+        nombre_receptor = await validar_usuario(datos.receptor_id, conn)
+        if not nombre_receptor:
+            raise HTTPException(status_code=404, detail="Receptor no encontrado.")
+
+        # No persistir, no Redis, no RabbitMQ — solo WS en vivo
+        if manager.esta_conectado(datos.receptor_id):
+            await manager.notify(
+                datos.receptor_id,
+                {
+                    "tipo": "mensaje_sin_memoria",
+                    "emisor_id": datos.emisor_id,
+                    "emisor_nombre": nombre_emisor,
+                    "contenido": datos.contenido,
+                },
+            )
+            return {
+                "entregado": True,
+                "modo": "sin_memoria",
+                "mensaje": "",
+            }
+
+        return {
+            "entregado": False,
+            "modo": "sin_memoria",
+            "mensaje": (
+                "El chat sin memoria solo funciona cuando ambos usuarios "
+                "están conectados. No se guarda historial en Vibe."
+            ),
+        }
     finally:
         await release_connection(conn)
 
