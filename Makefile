@@ -2,6 +2,9 @@
 # Uso: make <comando>
 # Ejecuta "make help" para ver todos los comandos disponibles.
 
+# Detecta docker compose v2 (docker compose) vs v1 (docker-compose)
+DOCKER_COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+
 # Declara los nombres como objetivos "falsos" para que make no los
 # confunda con archivos que tengan el mismo nombre.
 .PHONY: help up down restart logs ps build clean reset-db pull-model status disk prune prune-all
@@ -20,7 +23,7 @@ help:  ## Muestra esta ayuda con la lista de comandos disponibles
 	@echo ""
 
 up:  ## Construye y levanta todos los servicios en segundo plano
-	docker compose up --build -d
+	$(DOCKER_COMPOSE) up --build -d
 	@echo ""
 	@echo "Sistema arrancado. Servicios disponibles:"
 	@echo "  Aplicacion:       http://localhost"
@@ -30,14 +33,14 @@ up:  ## Construye y levanta todos los servicios en segundo plano
 	@echo "  Portainer:        http://localhost:9000"
 
 down:  ## Detiene todos los servicios conservando datos
-	docker compose down
+	$(DOCKER_COMPOSE) down
 
 restart:  ## Reinicia todos los servicios (down + up)
-	docker compose down
-	docker compose up --build -d
+	$(DOCKER_COMPOSE) down
+	$(DOCKER_COMPOSE) up --build -d
 
 logs:  ## Muestra los logs de todos los servicios en vivo (Ctrl+C para salir)
-	docker compose logs -f
+	$(DOCKER_COMPOSE) logs -f
 
 ps:  ## Muestra el estado de los contenedores
 	docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
@@ -48,18 +51,18 @@ status: ps  ## Alias de "ps"
 # ── Comandos avanzados ────────────────────────────────────────────────
 
 build:  ## Reconstruye las imagenes sin levantar los contenedores
-	docker compose build
+	$(DOCKER_COMPOSE) build
 
 clean:  ## Detiene los servicios y borra TODOS los datos (BD, modelo IA, etc)
 	@echo "ATENCION: esto borra todos los datos persistentes."
 	@read -p "Estas seguro? [s/N] " resp && [ "$$resp" = "s" ] || exit 1
-	docker compose down -v
+	$(DOCKER_COMPOSE) down -v
 	@echo "Sistema reseteado completamente."
 
 reset-db:  ## Borra solo mensajes y usuarios para una demo limpia
 	docker exec chat_db sh -c 'mariadb -u root -p"$$MYSQL_ROOT_PASSWORD" "$$MYSQL_DATABASE" \
 		-e "DELETE FROM mensajes; DELETE FROM usuarios;"'
-	docker compose restart api
+	$(DOCKER_COMPOSE) restart api
 	@echo "Base de datos limpiada y API reiniciada."
 
 pull-model:  ## Descarga el modelo Ollama (conecta y desconecta de la red publica)
@@ -118,7 +121,7 @@ prune-all:  ## Limpieza profunda: cache, volumenes, contenedores parados e image
 # ── Comandos de PRODUCCIÓN (usar imágenes de DockerHub) ──────────────
 
 prod-up: ## Levanta el sistema en modo producción (descarga imágenes de DockerHub)
-	docker compose -f docker-compose.prod.yml up -d
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml up -d
 	@echo ""
 	@echo "Sistema Vibe arrancado en modo producción"
 	@echo ""
@@ -129,10 +132,10 @@ prod-up: ## Levanta el sistema en modo producción (descarga imágenes de Docker
 	@echo "      Para activarla, ejecuta: make prod-pull-model"
 
 prod-down: ## Detiene el sistema en modo producción
-	docker compose -f docker-compose.prod.yml down
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml down
 
 prod-pull: ## Descarga las imágenes más recientes desde DockerHub
-	docker compose -f docker-compose.prod.yml pull
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml pull
 
 prod-pull-model: ## Descarga el modelo de IA llama3.2:3b en producción
 	@NETWORK_NAME=$$(docker network ls --format "{{.Name}}" | grep public_network | head -1); \
@@ -151,7 +154,7 @@ prod-pull-model: ## Descarga el modelo de IA llama3.2:3b en producción
 	echo "Modelo descargado. Lumi ya puede responder con la IA."
 
 prod-logs: ## Muestra logs del sistema en producción
-	docker compose -f docker-compose.prod.yml logs -f --tail=100
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml logs -f --tail=100
 
 prod-status: ## Muestra el estado de los contenedores en producción
-	docker compose -f docker-compose.prod.yml ps
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml ps

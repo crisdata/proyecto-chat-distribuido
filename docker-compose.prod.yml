@@ -31,6 +31,8 @@ services:
     image: crisdatap/vibe-frontend:latest
     container_name: chat_frontend
     restart: unless-stopped
+    mem_limit: 128m
+    mem_reservation: 64m
     ports:
       - "80:80"
     depends_on:
@@ -43,6 +45,8 @@ services:
     image: crisdatap/vibe-api:latest
     container_name: chat_api
     restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 256m
     env_file: .env
     depends_on:
       db:
@@ -63,6 +67,8 @@ services:
     image: mariadb:11
     container_name: chat_db
     restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 256m
     env_file: .env
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -84,6 +90,8 @@ services:
     image: redis:7-alpine
     container_name: chat_redis
     restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 128m
     command: redis-server --requirepass ${REDIS_PASSWORD:-}
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
@@ -106,6 +114,8 @@ services:
     image: ollama/ollama
     container_name: chat_ollama
     restart: unless-stopped
+    mem_limit: 4g
+    mem_reservation: 2g
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -125,6 +135,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: chat_rabbitmq
     restart: unless-stopped
+    mem_limit: 512m
+    mem_reservation: 256m
     env_file: .env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
@@ -148,6 +160,8 @@ services:
     image: crisdatap/vibe-worker:latest
     container_name: chat_worker
     restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 128m
     env_file: .env
     depends_on:
       rabbitmq:
@@ -166,6 +180,8 @@ services:
     image: amir20/dozzle:latest
     container_name: chat_dozzle
     restart: unless-stopped
+    mem_limit: 128m
+    mem_reservation: 64m
     profiles: [observability]
     ports:
       - "9999:8080"
@@ -179,6 +195,8 @@ services:
     image: rediscommander/redis-commander:latest
     container_name: chat_redis_commander
     restart: unless-stopped
+    mem_limit: 128m
+    mem_reservation: 64m
     profiles: [observability]
     ports:
       - "8081:8081"
@@ -195,6 +213,8 @@ services:
     image: portainer/portainer-ce:latest
     container_name: chat_portainer
     restart: unless-stopped
+    mem_limit: 256m
+    mem_reservation: 128m
     profiles: [observability]
     ports:
       - "9000:9000"
