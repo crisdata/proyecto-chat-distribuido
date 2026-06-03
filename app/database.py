@@ -3,16 +3,19 @@
 # Usa aiomysql para conexiones asíncronas, coherente con FastAPI.
 
 import asyncio
+import logging
 import aiomysql
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
+log = logging.getLogger("database")
+
 # Configuración de la base de datos desde variables de entorno
 DB_CONFIG = {
-    "host": "db",
-    "port": 3306,
+    "host": os.getenv("DB_HOST", "db"),
+    "port": int(os.getenv("DB_PORT", "3306")),
     "user": os.getenv("MYSQL_USER"),
     "password": os.getenv("MYSQL_PASSWORD"),
     "db": os.getenv("MYSQL_DATABASE"),
@@ -37,10 +40,6 @@ async def conectar():
 
     intentos_maximos = 10
     espera_entre_intentos = 3  # segundos
-
-    # Logger local (database.py no declara uno propio actualmente)
-    import logging
-    log = logging.getLogger("database")
 
     for intento in range(1, intentos_maximos + 1):
         try:
