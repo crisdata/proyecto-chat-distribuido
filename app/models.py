@@ -197,6 +197,44 @@ class MensajeSinMemoriaResponse(BaseModel):
     mensaje: str = ""
 
 
+class MensajeIARequest(BaseModel):
+    """Datos para enviar un mensaje a Lumi.
+
+    Extiende MensajeCreate con un campo modo opcional para memoria/sin memoria.
+    """
+    emisor_id: str
+    receptor_id: str
+    contenido: str
+
+    @field_validator("contenido")
+    @classmethod
+    def validar_contenido(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError("El contenido del mensaje no puede estar vacío.")
+        if len(v) > 2000:
+            raise ValueError("El mensaje no puede superar los 2000 caracteres.")
+        return v
+
+
+class IAModoRequest(BaseModel):
+    """Petición a Lumi con selector de modo."""
+    emisor_id: str
+    receptor_id: str
+    contenido: str
+    modo: str = "con_memoria"  # "con_memoria" | "sin_memoria"
+
+    @field_validator("contenido")
+    @classmethod
+    def validar_contenido(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError("El contenido del mensaje no puede estar vacío.")
+        if len(v) > 2000:
+            raise ValueError("El mensaje no puede superar los 2000 caracteres.")
+        return v
+
+
 # ── Respuestas generales ──────────────────────────────────────────────────────
 
 class RespuestaExito(BaseModel):

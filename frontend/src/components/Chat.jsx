@@ -3,7 +3,7 @@
 // Header muestra estado de presencia real (En línea / Activo hace X / Reposando).
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Bot, User, Loader, Shield, Flame, Users } from "lucide-react";
+import { Send, Bot, User, Loader, Shield, Flame, Users, Eye, EyeOff } from "lucide-react";
 import Mensaje from "./Mensaje";
 import {
 	enviarMensaje,
@@ -29,6 +29,8 @@ export default function Chat({
 	const [enviando, setEnviando] = useState(false);
 	const [cargando, setCargando] = useState(true);
 	const [modoAutodestructivo, setModoAutodestructivo] = useState(false);
+	const [modo, setModo] = useState("con_memoria");
+	const esSinMemoria = modo === "sin_memoria";
 	const finalRef = useRef(null);
 	const esIA = contacto.id === iaId;
 	const esGrupo = contacto.tipo === "grupo";
@@ -81,7 +83,7 @@ export default function Chat({
 			if (esGrupo) {
 				await enviarMensajeGrupo(contacto.id, contenido);
 			} else if (esIA) {
-				await enviarMensajeIA(usuarioActual.id, iaId, contenido);
+				await enviarMensajeIA(usuarioActual.id, iaId, contenido, modo);
 			} else {
 				const expiraEn = modoAutodestructivo ? 30 : null;
 				await enviarMensaje(usuarioActual.id, contacto.id, contenido, expiraEn);
@@ -207,6 +209,18 @@ export default function Chat({
 						{getTextoEstado()}
 					</p>
 				</div>
+				{!esGrupo && (
+					<button
+						title={esSinMemoria ? "Modo sin memoria" : "Modo con memoria"}
+						onClick={() => setModo(esSinMemoria ? "con_memoria" : "sin_memoria")}
+						className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
+							esSinMemoria
+								? "bg-amber-500/15 text-amber-400"
+								: "bg-vibe-800 text-vibe-500 hover:text-cyan-400"}`}
+					>
+						{esSinMemoria ? <EyeOff size={15} /> : <Eye size={15} />}
+					</button>
+				)}
 				<Shield size={18} className="text-cyan-500" />
 			</div>
 
