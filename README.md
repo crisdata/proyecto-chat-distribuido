@@ -14,20 +14,40 @@
 
 ## Tabla de contenido
 
-1. [Qué es Vibe](#qué-es-vibe)
-2. [Qué incluye el sistema](#qué-incluye-el-sistema)
-3. [Requisitos](#requisitos)
-4. [Instalación en Windows](#instalación-en-windows)
-5. [Cómo probar que funciona](#cómo-probar-que-funciona)
-6. [Activar la IA (Lumi)](#activar-la-ia-lumi)
-7. [Interfaces y observabilidad](#interfaces-y-observabilidad)
-8. [Endpoints de la API](#endpoints-de-la-api)
-9. [Comandos del Makefile](#comandos-del-makefile)
-10. [Arquitectura](#arquitectura)
-11. [CI/CD](#cicd)
-12. [Solución de problemas](#solución-de-problemas)
-13. [Estructura del proyecto](#estructura-del-proyecto)
-14. [Instalación para desarrollo](#instalación-para-desarrollo)
+1. [Ruta rápida para instalar](#ruta-rápida-para-instalar)
+2. [Qué es Vibe](#qué-es-vibe)
+3. [Qué incluye el sistema](#qué-incluye-el-sistema)
+4. [Requisitos](#requisitos)
+5. [Instalación en Windows](#instalación-en-windows)
+6. [Cómo probar que funciona](#cómo-probar-que-funciona)
+7. [Activar la IA (Lumi)](#activar-la-ia-lumi)
+8. [Interfaces y observabilidad](#interfaces-y-observabilidad)
+9. [Endpoints de la API](#endpoints-de-la-api)
+10. [Comandos del Makefile](#comandos-del-makefile)
+11. [Arquitectura](#arquitectura)
+12. [CI/CD](#cicd)
+13. [Solución de problemas](#solución-de-problemas)
+14. [Estructura del proyecto](#estructura-del-proyecto)
+15. [Instalación para desarrollo](#instalación-para-desarrollo)
+
+---
+
+## Ruta rápida para instalar
+
+Si solo quieres poner Vibe a funcionar en Windows, sigue este camino:
+
+1. Instala **Docker Desktop**.
+2. Abre **PowerShell**.
+3. Descarga `docker-compose.prod.yml` y `.env.example` (renómbralo a `.env`).
+4. Reemplaza `JWT_SECRET` y `WORKER_SECRET` en el `.env`.
+5. Ejecuta:
+   ```powershell
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+6. Espera entre 30 y 90 segundos.
+7. Abre http://localhost.
+
+Si ves la pantalla de login de Vibe, la instalación básica quedó lista.
 
 ---
 
@@ -56,7 +76,7 @@ asíncrona, caché, autenticación y observabilidad.
 | Mensajes en tiempo real | WebSocket con reconexión automática (backoff de 1s a 30s) |
 | Mensajes autodestructivos | Opción de envío efímero; el mensaje se elimina solo (mínimo 5s, máximo 5min) |
 | Presencia en tiempo real | Estado online/offline con expiración automática en Redis (TTL) |
-| Notificaciones por contacto | Contador individual de no leídos por cada contacto |
+| Notificaciones | Contadores de no leídos por contacto y por grupo |
 | Mensajería desacoplada | RabbitMQ + worker independiente con reintentos y cola de fallos |
 | Autenticación JWT revocable | Tokens firmados y validados también contra Redis para invalidación inmediata |
 | Locks distribuidos | Liberación atómica con script Lua en Redis durante el registro |
@@ -75,11 +95,12 @@ asíncrona, caché, autenticación y observabilidad.
 Necesitas **Docker Desktop**, que incluye Docker Engine y Docker Compose. La
 instalación se explica paso a paso en la siguiente sección.
 
-| Software | Para qué se usa |
-|---|---|
-| Docker Desktop | Ejecuta y orquesta todos los contenedores |
-| Git | Descargar los archivos del repositorio |
-| Python 3 (solo con WSL) | Generar las claves de seguridad |
+| Software | Obligatorio | Para qué se usa |
+|---|---|---|
+| Docker Desktop | Sí | Ejecuta y orquesta todos los contenedores |
+| PowerShell | Sí en Windows | Descargar archivos y ejecutar Docker; ya viene instalado en Windows |
+| Git | No para ejecutar; sí para desarrollo | Clonar el repositorio completo si quieres modificar código |
+| Python 3 | Solo con WSL/desarrollo | Generar claves y trabajar con el backend |
 
 ### Hardware
 
@@ -100,12 +121,12 @@ instalación se explica paso a paso en la siguiente sección.
 
 En Windows hay dos formas de hacerlo. Elige una:
 
-- **Opción A — WSL (Ubuntu).** Es la recomendada. Permite usar los comandos
-  cortos del Makefile (`make ...`).
-- **Opción B — PowerShell.** No requiere WSL ni Python, pero usarás los
-  comandos completos de Docker en lugar del Makefile.
+- **Opción A — PowerShell.** Es la más simple si solo quieres ejecutar la app.
+  No requiere WSL ni Python.
+- **Opción B — WSL (Ubuntu).** Es cómoda si ya usas Linux o quieres usar los
+  comandos cortos del Makefile (`make ...`).
 
-Ambas opciones necesitan primero instalar Docker Desktop y Git.
+Ambas opciones necesitan Docker Desktop. Git solo es necesario si quieres clonar el repositorio completo o modificar código.
 
 ### Paso 1 — Instalar Docker Desktop
 
@@ -116,75 +137,73 @@ Ambas opciones necesitan primero instalar Docker Desktop y Git.
 5. Espera a que el ícono de la barra de tareas deje de animarse y quede estable
    (eso indica que Docker está listo).
 
-### Paso 2 — Instalar Git
+### Paso 2 — Instalar Git (opcional)
+
+Para ejecutar Vibe con Docker no necesitas Git. Puedes saltar este paso.
+
+Instala Git solo si quieres clonar el repositorio completo o modificar código:
 
 1. Descarga el instalador desde https://git-scm.com/download/win
 2. Instálalo con las opciones predeterminadas.
 
 ### Paso 3 — Elegir tu terminal
 
-**Si vas con la Opción A (WSL):**
+**Si vas con PowerShell:** abre PowerShell normal. No necesitas instalar nada
+más.
 
-1. Docker Desktop instala WSL automáticamente durante su instalación. Solo hay
-   que activar la integración con la distribución de Ubuntu:
-   - Abre Docker Desktop.
-   - Ve a **Settings** (el ícono de engranaje) -> **Resources** -> **WSL Integration**.
-   - Activa la opción **Enable integration with my default WSL distro** y, si
-     aparece **Ubuntu** en la lista, enciende también su interruptor.
-   - Pulsa **Apply & restart**.
-2. Busca **Ubuntu** en el menú de inicio y ábrelo. Esa terminal es donde
-   ejecutarás los comandos de la Opción A.
-3. Dentro de Ubuntu, instala Python, Make y Git:
+**Si vas con WSL (Ubuntu):**
+
+1. Abre Docker Desktop.
+2. Ve a **Settings** (ícono de engranaje) -> **Resources** -> **WSL Integration**.
+3. Activa **Enable integration with my default WSL distro**.
+4. Si aparece **Ubuntu**, activa también su interruptor.
+5. Pulsa **Apply & restart**.
+6. Abre **Ubuntu** desde el menú de inicio.
+7. Dentro de Ubuntu, instala Python, Make y Git:
 
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-pip make git
 ```
 
-> Si no ves **Ubuntu** en el menú de inicio ni en la lista de WSL Integration,
-> es que la distribución aún no está instalada. Ábrela desde Microsoft Store
-> buscando "Ubuntu", o usa la Opción B (PowerShell), que no necesita WSL.
-
-**Si vas con la Opción B (PowerShell):** abre PowerShell normal. No necesitas
-instalar nada más.
+> Si no ves Ubuntu, usa PowerShell o instala Ubuntu desde Microsoft Store.
 
 ### Paso 4 — Descargar los archivos del proyecto
 
-No necesitas clonar todo el repositorio: solo tres archivos.
+No necesitas clonar todo el repositorio: solo debes descargar los archivos de arranque.
 
-**Opción A (Ubuntu/WSL):**
-```bash
-mkdir vibe-deploy && cd vibe-deploy
-curl -O https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/docker-compose.prod.yml
-curl -O https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/.env.example
-curl -O https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/Makefile
-mv .env.example .env
-```
-
-**Opción B (PowerShell):**
+**PowerShell:**
 ```powershell
 mkdir vibe-deploy; cd vibe-deploy
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/docker-compose.prod.yml" -OutFile "docker-compose.prod.yml"
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/.env.example" -OutFile ".env"
 ```
 
+**WSL / Ubuntu:**
+```bash
+mkdir vibe-deploy && cd vibe-deploy
+curl -L -o docker-compose.prod.yml https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/docker-compose.prod.yml
+curl -L -o .env https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/.env.example
+curl -L -o Makefile https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/Makefile
+```
+
+Al terminar, verifica que tienes estos archivos:
+
+```text
+.env
+docker-compose.prod.yml
+Makefile        # solo si usaste WSL/Ubuntu
+```
+
 ### Paso 5 — Generar las claves de seguridad
 
 El archivo `.env` ya trae dos claves de ejemplo (`JWT_SECRET` y
 `WORKER_SECRET`) con un valor temporal que **debes reemplazar** por valores
-aleatorios. Si no lo haces, la API no arranca. Es importante **reemplazar**
-esas líneas, no añadir nuevas: si quedan duplicadas, el sistema podría leer la
-clave de ejemplo y fallar.
+aleatorios. La API arranca incluso con los valores de ejemplo, pero es
+inseguro: cualquiera que conozca esas claves podría firmar tokens falsos.
+Solo falla si las claves faltan o están vacías.
 
-**Opción A (Ubuntu/WSL):** estos comandos reemplazan directamente las líneas
-existentes en el `.env`.
-```bash
-sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')|" .env
-sed -i "s|^WORKER_SECRET=.*|WORKER_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')|" .env
-```
-
-**Opción B (PowerShell):** genera claves sin los caracteres `+`, `/` ni `=`
-(que romperían el `.env`) y reemplaza las líneas existentes sin duplicarlas.
+**PowerShell:** genera claves sin los caracteres `+`, `/` ni `=` y reemplaza las líneas existentes sin duplicarlas.
 ```powershell
 function New-Clave {
   $bytes = New-Object 'System.Byte[]' 36
@@ -196,14 +215,21 @@ $worker = New-Clave
 (Get-Content .env) `
   -replace '^JWT_SECRET=.*', "JWT_SECRET=$jwt" `
   -replace '^WORKER_SECRET=.*', "WORKER_SECRET=$worker" |
-  Set-Content .env
+  Set-Content -Path .env -Encoding ascii
 ```
 
-Verifica que las dos claves quedaron con valores nuevos (y que no están
-duplicadas):
+Verifica que las dos claves quedaron con valores nuevos y que no están duplicadas:
 
 ```powershell
 Select-String -Path .env -Pattern "JWT_SECRET|WORKER_SECRET"
+```
+
+**WSL / Ubuntu:**
+```bash
+sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')|" .env
+sed -i "s|^WORKER_SECRET=.*|WORKER_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')|" .env
+
+grep -E 'JWT_SECRET|WORKER_SECRET' .env
 ```
 
 ### Paso 6 — Levantar el sistema
@@ -211,27 +237,37 @@ Select-String -Path .env -Pattern "JWT_SECRET|WORKER_SECRET"
 La primera vez descarga unos 600 MB de imágenes, así que tarda entre 3 y 5
 minutos.
 
-**Opción A (Ubuntu/WSL):**
-```bash
-make prod-up
-```
-
-**Opción B (PowerShell):**
+**PowerShell:**
 ```powershell
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+**WSL / Ubuntu:**
+```bash
+make prod-up
+```
+
+Comprueba que los contenedores arrancaron:
+
+```powershell
+docker compose -f docker-compose.prod.yml ps
+```
+
+Algunos servicios pueden aparecer como `starting` durante los primeros segundos. Espera hasta 90 segundos antes de abrir la app.
+
 ### Paso 7 — Abrir la aplicación
 
-Espera unos 30 segundos (en equipos más lentos, hasta 90 segundos, mientras
-RabbitMQ y la base de datos terminan de arrancar) y abre tu navegador en:
+Espera unos 30 segundos. En equipos lentos puede tardar hasta 90 segundos, mientras RabbitMQ y la base de datos terminan de arrancar.
 
-### http://localhost
+Luego abre:
 
-Inicia sesión con cualquier correo de demo. Si el correo no existe, Vibe te
-pedirá un nombre visible; si ya existe, entra directo. La IA arranca en modo
-"reposando" hasta que descargues su modelo: ve a
-[Activar la IA (Lumi)](#activar-la-ia-lumi).
+```text
+http://localhost
+```
+
+Inicia sesión con cualquier correo de demo. Si el correo no existe, Vibe te pedirá un nombre visible; si ya existe, entra directo.
+
+La IA arranca en modo "reposando" hasta que descargues su modelo. Si quieres activar respuestas generadas por IA local, ve a [Activar la IA (Lumi)](#activar-la-ia-lumi).
 
 ---
 
@@ -303,17 +339,18 @@ se descarga, y se vuelve a aislar. Este procedimiento está automatizado.
 El modelo pesa unos 2 GB, así que la descarga tarda entre 3 y 10 minutos. Solo
 hay que hacerlo una vez: el modelo queda guardado y sobrevive a reinicios.
 
-**Opción A (Ubuntu/WSL):**
-```bash
-make prod-pull-model
-```
-
-**Opción B (PowerShell):**
+**PowerShell:**
 ```powershell
-$NETWORK = (docker network ls --format "{{.Name}}" | Select-String "public_network").ToString()
+$NETWORK = docker network ls --format "{{.Name}}" | Where-Object { $_ -like "*public_network*" } | Select-Object -First 1
+if (-not $NETWORK) { Write-Host "Primero levanta el sistema con docker compose up -d"; exit 1 }
 docker network connect $NETWORK chat_ollama
 docker exec -i chat_ollama ollama pull llama3.2:3b
 docker network disconnect $NETWORK chat_ollama
+```
+
+**WSL / Ubuntu:**
+```bash
+make prod-pull-model
 ```
 
 Al terminar, verifica que el modelo quedó instalado:
@@ -346,9 +383,9 @@ Las demás herramientas de monitoreo están **desactivadas por defecto** y se
 activan con un *profile* de Docker Compose. Para levantarlas (por ejemplo, para
 la sustentación):
 
-**Opción A (Ubuntu/WSL):** edita el comando o levanta directamente con compose.
-**Ambas opciones:**
-```bash
+Para activar esas herramientas, ejecuta:
+
+```powershell
 docker compose -f docker-compose.prod.yml --profile observability up -d
 ```
 
@@ -372,17 +409,25 @@ La forma más cómoda de explorarlos es Swagger UI en http://localhost/api/docs.
 | Método | Endpoint | Requiere token | Descripción |
 |---|---|---|---|
 | GET | `/` | No | Estado del sistema |
-| POST | `/usuarios` | No | Registrar o reingresar un usuario (devuelve token) |
-| GET | `/usuarios` | No | Listar todos los usuarios |
+| POST | `/usuarios/login` | No | Login demo por correo; si el email es nuevo puede pedir nombre visible |
+| POST | `/usuarios` | No | Registro heredado por nombre; se conserva por compatibilidad |
+| GET | `/usuarios` | No | Listar usuarios visibles para iniciar chats |
 | GET | `/usuarios/me` | Sí | Datos del usuario autenticado |
 | GET | `/usuarios/{id}/presencia` | No | Estado de conexión de un usuario |
 | POST | `/usuarios/presencia/bulk` | No | Estado de conexión de varios usuarios |
-| POST | `/mensaje_privado` | Sí | Enviar un mensaje privado (admite autodestrucción con `expira_en`) |
-| GET | `/conversacion/{id}` | Sí | Historial de mensajes recibidos (heredado, paginado) |
-| GET | `/conversacion/{id}/{contacto_id}` | Sí | Conversación entre dos usuarios (paginada) |
+| POST | `/mensaje_privado` | Sí | Enviar mensaje privado persistente; admite autodestrucción con `expira_en` |
+| POST | `/mensaje_privado/sin_memoria` | Sí | Enviar mensaje privado solo en vivo, sin guardar historial |
+| GET | `/conversacion/{id}/{contacto_id}` | Sí | Conversación entre dos usuarios, paginada |
 | GET | `/no_leidos/{id}` | Sí | Mensajes no leídos, con desglose por contacto |
 | DELETE | `/no_leidos/{id}/{contacto}` | Sí | Marcar una conversación como leída |
-| POST | `/ia/mensaje` | Sí | Enviar un mensaje a Lumi |
+| POST | `/grupos` | Sí | Crear grupo público |
+| GET | `/grupos/buscar` | Sí | Buscar grupos públicos por nombre |
+| GET | `/grupos/mios` | Sí | Listar grupos a los que pertenece el usuario |
+| POST | `/grupos/{grupo_id}/unirse` | Sí | Unirse a un grupo público |
+| GET | `/grupos/{grupo_id}/mensajes` | Sí | Leer mensajes de un grupo |
+| POST | `/grupos/{grupo_id}/mensajes` | Sí | Enviar mensaje a un grupo |
+| POST | `/ia/mensaje` | Sí | Enviar mensaje persistente a Lumi |
+| POST | `/ia/mensaje/modo` | Sí | Enviar mensaje a Lumi indicando `con_memoria` o `sin_memoria` |
 | GET | `/ia/estado` | No | Verificar si Lumi está disponible |
 | POST | `/interno/notificar` | Secreto de worker | Endpoint interno usado solo por el worker |
 | WS | `/ws/{usuario_id}` | Sí (primer mensaje) | Conexión WebSocket en tiempo real |
@@ -392,23 +437,35 @@ La forma más cómoda de explorarlos es Swagger UI en http://localhost/api/docs.
 > 10 segundos; si no, la conexión se cierra. Esto evita que el token quede
 > registrado en los logs de Nginx.
 
-### Ejemplo: registrar un usuario
+### Ejemplo: iniciar sesión por correo
+
+El siguiente ejemplo usa Bash (funciona en WSL, Ubuntu o Git Bash).
+
+Primer intento con un correo nuevo:
 
 ```bash
-curl -X POST http://localhost/api/usuarios \
+curl -X POST http://localhost/api/usuarios/login \
   -H "Content-Type: application/json" \
-  -d '{"nombre": "Alice"}'
+  -d '{"email": "alice@example.com"}'
 ```
 
-La respuesta incluye el `id`, el `nombre` y el `token` JWT que se usa para las
-llamadas autenticadas.
+Si el correo no existe, la API responde que requiere nombre. Entonces repite el
+login incluyendo `nombre`:
+
+```bash
+curl -X POST http://localhost/api/usuarios/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@example.com", "nombre": "Alice"}'
+```
+
+La respuesta incluye `id`, `nombre` y `token`. No incluye el email.
 
 ---
 
 ## Comandos del Makefile
 
-> Los comandos `make` solo funcionan en la Opción A (Ubuntu/WSL). En PowerShell
-> usa el comando completo de Docker que aparece en cada caso.
+> Los comandos `make` solo funcionan en WSL/Ubuntu. En PowerShell usa el
+> comando completo de Docker que aparece en cada caso.
 
 ### Producción (imágenes de DockerHub)
 
@@ -421,25 +478,36 @@ llamadas autenticadas.
 | `make prod-logs` | `docker compose -f docker-compose.prod.yml logs -f` | Muestra los logs en vivo |
 | `make prod-status` | `docker compose -f docker-compose.prod.yml ps` | Muestra el estado de los contenedores |
 
-### Mantenimiento
+### Mantenimiento (solo desarrollo o clon completo)
+
+Estos comandos usan `docker-compose.yml` local y requieren tener el repositorio
+completo. No funcionan si solo descargaste los archivos de producción.
 
 | Comando | Qué hace |
 |---|---|
-| `make reset-db` | Borra mensajes y usuarios para una demo limpia (Ubuntu/WSL) |
-| `make clean` | Borra TODOS los datos persistentes (pide confirmación) |
+| `make reset-db` | Limpieza básica heredada de usuarios/mensajes; para reset completo usa `make clean` |
+| `make clean` | Borra TODOS los datos persistentes: usuarios, grupos, mensajes, modelo IA y volúmenes (pide confirmación) |
 | `make disk` | Muestra el uso de disco de Docker |
 | `make prune` | Limpia caché de builds antiguos sin tocar datos |
 
 En PowerShell, para una limpieza total equivalente a `make clean`:
+
 ```powershell
 docker compose -f docker-compose.prod.yml down -v
+```
+
+Después de una limpieza total, vuelve a levantar el sistema con:
+
+```powershell
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ---
 
 ## Arquitectura
 
-El sistema tiene 10 contenedores en 3 redes con niveles crecientes de
+El sistema define 10 servicios: 7 se levantan por defecto y 3 son opcionales
+para observabilidad. Todos se organizan en 3 redes con niveles crecientes de
 aislamiento:
 
 - **public_network** — Capa accesible desde el navegador. Contiene el frontend
@@ -501,7 +569,7 @@ Las imágenes están en https://hub.docker.com/u/crisdatap
 
 ## Solución de problemas
 
-### Al registrarme aparece "Unexpected token '<'... is not valid JSON"
+### Al iniciar sesión aparece "Unexpected token '<'... is not valid JSON"
 
 La API todavía no está lista detrás de Nginx (suele pasar los primeros segundos,
 o si la API está reiniciándose). Espera hasta 90 segundos y recarga. Si persiste,
@@ -615,8 +683,9 @@ proyecto-chat-distribuido/
 │   ├── request_id.py           # Identificador de trazabilidad por petición
 │   ├── logging_config.py       # Configuración central de logs
 │   └── routers/                # Endpoints de la API
-│       ├── usuarios.py         # Registro, listado y presencia
+│       ├── usuarios.py         # Login por correo, registro, listado y presencia
 │       ├── mensajes.py         # Mensajes privados y conversaciones
+│       ├── grupos.py           # Creación, búsqueda y chat de grupos públicos
 │       ├── ia.py               # Lumi (envío y estado)
 │       ├── websocket.py        # Conexiones en tiempo real
 │       └── interno.py          # Endpoint interno usado por el worker
