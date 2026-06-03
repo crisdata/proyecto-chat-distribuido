@@ -48,8 +48,11 @@ asíncrona, caché, autenticación y observabilidad.
 
 | Funcionalidad | Cómo está implementada |
 |---|---|
+| Login por correo | Inicio de sesión demo con email normalizado y nombre visible; el email no se expone en UI/API/JWT |
 | Chat privado entre usuarios | Mensajes persistidos en MariaDB, autenticación JWT |
+| Grupos públicos | Creación, búsqueda y chat en grupos abiertos sin administradores ni moderación |
 | Compañera virtual Lumi | Ollama con `llama3.2:3b` en red aislada; responde con mensajes empáticos de respaldo si el modelo no está cargado |
+| Modos con/sin memoria | Chats persistentes o modo sin memoria sin historial guardado en Vibe |
 | Mensajes en tiempo real | WebSocket con reconexión automática (backoff de 1s a 30s) |
 | Mensajes autodestructivos | Opción de envío efímero; el mensaje se elimina solo (mínimo 5s, máximo 5min) |
 | Presencia en tiempo real | Estado online/offline con expiración automática en Redis (TTL) |
@@ -205,7 +208,8 @@ RabbitMQ y la base de datos terminan de arrancar) y abre tu navegador en:
 
 ### http://localhost
 
-Regístrate con cualquier nombre y empieza a chatear. La IA arranca en modo
+Inicia sesión con cualquier correo de demo. Si el correo no existe, Vibe te
+pedirá un nombre visible; si ya existe, entra directo. La IA arranca en modo
 "reposando" hasta que descargues su modelo: ve a
 [Activar la IA (Lumi)](#activar-la-ia-lumi).
 
@@ -213,17 +217,16 @@ Regístrate con cualquier nombre y empieza a chatear. La IA arranca en modo
 
 ## Cómo probar que funciona
 
-### Prueba 1 — Chat entre dos usuarios
+### Prueba 1 — Login por correo y chat entre dos usuarios
 
-1. En la pantalla de registro, entra con el nombre **Alice**.
+1. Entra con el correo **alice@example.com**. Si es la primera vez, escribe el nombre visible **Alice**.
 2. Abre una **ventana de incógnito** (Ctrl+Shift+N en Chrome o Edge).
-3. Ve a http://localhost y entra como **Bob**.
+3. Ve a http://localhost y entra con **bob@example.com**. Si es la primera vez, escribe **Bob**.
 4. En la ventana de Alice, Bob aparece automáticamente en la lista de contactos.
 5. Haz clic en Bob y escríbele un mensaje.
 6. Cambia a la ventana de Bob: el mensaje aparece al instante.
 
-Si esto funciona, el WebSocket, la base de datos y las notificaciones están
-operando bien.
+Si esto funciona, el login, el WebSocket, la base de datos y las notificaciones están operando bien.
 
 ### Prueba 2 — Mensaje autodestructivo
 
@@ -232,17 +235,31 @@ operando bien.
 2. Envía un mensaje. Verás un contador regresivo de 30 segundos.
 3. Al llegar a cero, el mensaje desaparece de la conversación.
 
-### Prueba 3 — Conversar con Lumi
+### Prueba 3 — Conversar con Lumi con/sin memoria
 
 1. Lumi aparece anclada arriba en la lista de contactos, con avatar púrpura.
-2. Haz clic en Lumi y escríbele algo.
-3. Si descargaste el modelo, responde con un mensaje generado por la IA (la
-   primera respuesta puede tardar de 30 a 60 segundos mientras el modelo carga
-   en memoria).
-4. Si no lo descargaste, responde con un mensaje empático de respaldo: eso es
-   normal y esperado.
+2. Haz clic en Lumi y escríbele algo en modo **Con memoria**.
+3. Cambia a **Sin memoria** con el botón de ojo del encabezado y envía otro mensaje.
+4. Cambia de vuelta a **Con memoria**: los mensajes sin memoria no deben aparecer en el historial persistente.
+5. Si descargaste el modelo, Lumi responde con IA local; si no, responde con un mensaje empático de respaldo.
 
-### Prueba 4 — Trazabilidad (request_id)
+### Prueba 4 — Grupos públicos
+
+1. Haz clic en **Nuevo chat** y abre la pestaña **Crear**.
+2. Crea un grupo, por ejemplo **Programación**.
+3. Desde otra ventana/sesión, busca el grupo en **Nuevo chat → Grupos** y únete.
+4. Envía un mensaje desde una sesión: si la otra está dentro del grupo, el mensaje llega en vivo.
+5. Si la otra sesión está en otro chat, aparece un badge de no leído en el grupo.
+6. Los mensajes del grupo muestran el nombre visible de quien escribió.
+
+### Prueba 5 — Chat persona-persona sin memoria
+
+1. Haz clic en **Nuevo chat → Personas**.
+2. Elegí **Sin memoria** antes de seleccionar a la persona.
+3. Envía un mensaje: debe mostrarse en vivo, pero no quedar guardado al volver a abrir el chat.
+4. Volvé a iniciar un chat en modo **Con memoria**: los mensajes sin memoria no deben aparecer.
+
+### Prueba 6 — Trazabilidad (request_id)
 
 1. Levanta las herramientas de observabilidad (ver
    [Interfaces y observabilidad](#interfaces-y-observabilidad)) y abre Dozzle en

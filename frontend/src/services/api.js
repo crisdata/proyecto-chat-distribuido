@@ -30,6 +30,24 @@ function authHeaders() {
 
 // ── Usuarios ──────────────────────────────────────────────────────────────
 
+export async function loginUsuario(email, nombre = null) {
+	const body = { email };
+	if (nombre !== null) body.nombre = nombre;
+
+	const res = await fetch(`${BASE_URL}/usuarios/login`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const error = await res.json();
+		throw new Error(error.detail || "Error al iniciar sesión");
+	}
+	const data = await res.json();
+	if (data.token) setToken(data.token);
+	return data;
+}
+
 export async function registrarUsuario(nombre) {
 	const res = await fetch(`${BASE_URL}/usuarios`, {
 		method: "POST",
@@ -158,14 +176,24 @@ export async function marcarComoLeidos(usuarioId, contactoId) {
 
 // ── Inteligencia Artificial ───────────────────────────────────────────────
 
-export async function enviarMensajeIA(emisor_id, ia_id, contenido) {
-	const res = await fetch(`${BASE_URL}/ia/mensaje`, {
+export async function enviarMensajeIA(
+	emisor_id,
+	ia_id,
+	contenido,
+	modo = "con_memoria",
+) {
+	const endpoint =
+		modo === "sin_memoria"
+			? `${BASE_URL}/ia/mensaje/modo`
+			: `${BASE_URL}/ia/mensaje`;
+
+	const res = await fetch(endpoint, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
 			...authHeaders(),
 		},
-		body: JSON.stringify({ emisor_id, receptor_id: ia_id, contenido }),
+		body: JSON.stringify({ emisor_id, receptor_id: ia_id, contenido, modo }),
 	});
 	if (!res.ok) {
 		const error = await res.json();
@@ -181,6 +209,84 @@ export async function estadoIA() {
 	} catch {
 		return { disponible: false };
 	}
+}
+
+// ── Grupos ─────────────────────────────────────────────────────────────────
+
+export async function crearGrupo(nombre) {
+	const res = await fetch(`${BASE_URL}/grupos`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...authHeaders() },
+		body: JSON.stringify({ nombre }),
+	});
+	if (!res.ok) throw new Error("Error al crear grupo");
+	return res.json();
+}
+
+export async function buscarGrupos(q) {
+	const res = await fetch(
+		`${BASE_URL}/grupos/buscar?q=${encodeURIComponent(q)}`,
+		{
+			headers: authHeaders(),
+		},
+	);
+	if (!res.ok) throw new Error("Error al buscar grupos");
+	return res.json();
+}
+
+export async function gruposMios() {
+	const res = await fetch(`${BASE_URL}/grupos/mios`, {
+		headers: authHeaders(),
+	});
+	if (!res.ok) throw new Error("Error al obtener grupos");
+	return res.json();
+}
+
+export async function unirseAGrupo(grupoId) {
+	const res = await fetch(`${BASE_URL}/grupos/${grupoId}/unirse`, {
+		method: "POST",
+		headers: authHeaders(),
+	});
+	if (!res.ok) throw new Error("Error al unirse al grupo");
+	return res.json();
+}
+
+export async function mensajesGrupo(
+	grupoId,
+	{ limit = 50, beforeId = null } = {},
+) {
+	const params = new URLSearchParams({ limit: String(limit) });
+	if (beforeId) params.set("before_id", String(beforeId));
+	const res = await fetch(
+		`${BASE_URL}/grupos/${grupoId}/mensajes?${params.toString()}`,
+		{ headers: authHeaders() },
+	);
+	if (!res.ok) throw new Error("Error al obtener mensajes del grupo");
+	return res.json();
+}
+
+export async function enviarMensajeGrupo(grupoId, contenido) {
+	const res = await fetch(`${BASE_URL}/grupos/${grupoId}/mensajes`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...authHeaders() },
+		body: JSON.stringify({ contenido }),
+	});
+	if (!res.ok) throw new Error("Error al enviar mensaje al grupo");
+	return res.json();
+}
+
+export async function enviarMensajeSinMemoria(
+	emisor_id,
+	receptor_id,
+	contenido,
+) {
+	const res = await fetch(`${BASE_URL}/mensaje_privado/sin_memoria`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...authHeaders() },
+		body: JSON.stringify({ emisor_id, receptor_id, contenido }),
+	});
+	if (!res.ok) throw new Error("Error al enviar mensaje sin memoria");
+	return res.json();
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────

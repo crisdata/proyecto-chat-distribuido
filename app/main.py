@@ -17,6 +17,7 @@ from app.logging_config import configurar_logging
 configurar_logging()
 
 from app.routers import usuarios, mensajes, ia, websocket
+from app.routers.grupos import router as grupos_router  # pyright: ignore[reportMissingImports]
 from app.routers.interno import router as interno_router
 from app.routers.ia import registrar_nodo_ia
 from app.database import conectar, desconectar, crear_tablas, get_connection, release_connection
@@ -136,6 +137,7 @@ app.include_router(usuarios.router)
 app.include_router(mensajes.router)
 app.include_router(ia.router)
 app.include_router(websocket.router)
+app.include_router(grupos_router)
 app.include_router(interno_router)
 
 

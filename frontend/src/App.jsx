@@ -19,6 +19,7 @@ import {
 	marcarComoLeidos,
 	crearWebSocket,
 	setToken,
+	gruposMios,
 } from "./services/api";
 import { usePresencia } from "./hooks/usePresencia";
 
@@ -27,9 +28,16 @@ export default function App() {
 	const [contactos, setContactos] = useState([]);
 	const [contactoActivo, setContactoActivo] = useState(null);
 	const [iaId, setIaId] = useState(null);
+	const [grupos, setGrupos] = useState([]);
 	const [cargandoSesion, setCargandoSesion] = useState(true);
-	const [noLeidos, setNoLeidos] = useState({ total: 0, porContacto: {} });
+	const [noLeidos, setNoLeidos] = useState({
+		total: 0,
+		porContacto: {},
+		porGrupo: {},
+	});
 	const [actualizacionMensajes, setActualizacionMensajes] = useState(0);
+	const [mensajeSinMemoriaEntrante, setMensajeSinMemoriaEntrante] =
+		useState(null);
 
 	const huellaContactosRef = useRef("");
 	const contactoActivoRef = useRef(null);
@@ -41,6 +49,22 @@ export default function App() {
 	);
 
 	const presencias = usePresencia(idsParaPresencia);
+
+	function totalPorGrupo(porGrupo = {}) {
+		return Object.values(porGrupo).reduce((acc, n) => acc + Number(n || 0), 0);
+	}
+
+	function aplicarNoLeidosPrivados(data) {
+		setNoLeidos((prev) => {
+			const porGrupo = prev.porGrupo || {};
+			const totalPrivado = data.no_leidos || 0;
+			return {
+				total: totalPrivado + totalPorGrupo(porGrupo),
+				porContacto: data.por_contacto || {},
+				porGrupo,
+			};
+		});
+	}
 
 	// Restaurar sesión al montar
 	useEffect(() => {
@@ -87,12 +111,30 @@ export default function App() {
 		return () => clearInterval(intervalo);
 	}, [usuario]);
 
+	// Polling de grupos unidos cada 10s
+	useEffect(() => {
+		if (!usuario) return;
+
+		async function cargarGrupos() {
+			try {
+				const data = await gruposMios();
+				setGrupos(data);
+			} catch (e) {
+				console.error("Error al cargar grupos:", e);
+			}
+		}
+
+		cargarGrupos();
+		const intervalo = setInterval(cargarGrupos, 10000);
+		return () => clearInterval(intervalo);
+	}, [usuario]);
+
 	// No leídos: carga inicial + reconciliación lenta.
 	// Las actualizaciones normales llegan por WebSocket para evitar
 	// consultar al backend cada 3 segundos.
 	useEffect(() => {
 		if (!usuario) {
-			setNoLeidos({ total: 0, porContacto: {} });
+			setNoLeidos({ total: 0, porContacto: {}, porGrupo: {} });
 			return;
 		}
 
@@ -102,10 +144,7 @@ export default function App() {
 			const data = await obtenerNoLeidos(usuario.id);
 			if (cancelado) return;
 
-			setNoLeidos({
-				total: data.no_leidos || 0,
-				porContacto: data.por_contacto || {},
-			});
+			aplicarNoLeidosPrivados(data);
 		}
 
 		actualizar();
@@ -126,6 +165,36 @@ export default function App() {
 		const cerrarWS = crearWebSocket(
 			usuario.id,
 			(datos) => {
+				if (datos.tipo === "mensaje_sin_memoria") {
+					setMensajeSinMemoriaEntrante(datos);
+					return;
+				}
+				if (datos.tipo === "nuevo_mensaje_grupo") {
+					const contactoActivoActual = contactoActivoRef.current;
+					if (
+						contactoActivoActual?.tipo === "grupo" &&
+						contactoActivoActual?.id === datos.grupo_id
+					) {
+						setActualizacionMensajes((prev) => prev + 1);
+						return;
+					}
+
+					setNoLeidos((prev) => {
+						const grupoId = datos.grupo_id;
+						const delta = datos.no_leidos_delta || 1;
+						const porGrupo = prev.porGrupo || {};
+						const actualGrupo = porGrupo[grupoId] || 0;
+						return {
+							total: prev.total + delta,
+							porContacto: prev.porContacto || {},
+							porGrupo: {
+								...porGrupo,
+								[grupoId]: actualGrupo + delta,
+							},
+						};
+					});
+					return;
+				}
 				if (datos.tipo !== "nuevo_mensaje") return;
 
 				const emisorId = datos.emisor_id;
@@ -148,6 +217,7 @@ export default function App() {
 							...prev.porContacto,
 							[emisorId]: actualContacto + delta,
 						},
+						porGrupo: prev.porGrupo || {},
 					};
 				});
 			},
@@ -165,11 +235,23 @@ export default function App() {
 			await marcarComoLeidos(usuario.id, contacto.id);
 			// Refrescar inmediatamente para que el badge desaparezca
 			const data = await obtenerNoLeidos(usuario.id);
-			setNoLeidos({
-				total: data.no_leidos || 0,
-				porContacto: data.por_contacto || {},
-			});
+			aplicarNoLeidosPrivados(data);
 		}
+	}
+
+	function handleSeleccionarGrupo(grupo) {
+		setContactoActivo({ ...grupo, tipo: "grupo" });
+		setNoLeidos((prev) => {
+			const cantidadGrupo = prev.porGrupo?.[grupo.id] || 0;
+			if (cantidadGrupo === 0) return prev;
+			const porGrupo = { ...(prev.porGrupo || {}) };
+			delete porGrupo[grupo.id];
+			return {
+				total: Math.max(0, prev.total - cantidadGrupo),
+				porContacto: prev.porContacto || {},
+				porGrupo,
+			};
+		});
 	}
 
 	function handleLogout() {
@@ -178,8 +260,9 @@ export default function App() {
 		setContactos([]);
 		setContactoActivo(null);
 		setIaId(null);
-		setNoLeidos({ total: 0, porContacto: {} });
+		setNoLeidos({ total: 0, porContacto: {}, porGrupo: {} });
 		setActualizacionMensajes(0);
+		setGrupos([]);
 		huellaContactosRef.current = "";
 	}
 
@@ -215,8 +298,10 @@ export default function App() {
 
 			<ListaContactos
 				contactos={contactos}
+				grupos={grupos}
 				contactoActivo={contactoActivo}
 				onSeleccionar={handleSeleccionarContacto}
+				onSeleccionarGrupo={handleSeleccionarGrupo}
 				usuarioActual={usuario}
 				iaId={iaId}
 				presencias={presencias}
@@ -230,6 +315,8 @@ export default function App() {
 					iaId={iaId}
 					presencias={presencias}
 					actualizacionMensajes={actualizacionMensajes}
+					mensajeSinMemoriaEntrante={mensajeSinMemoriaEntrante}
+					onConsumirSinMemoria={() => setMensajeSinMemoriaEntrante(null)}
 				/>
 			) : (
 				<div className="flex-1 flex flex-col items-center justify-center bg-vibe-950">

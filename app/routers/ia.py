@@ -13,6 +13,8 @@
 #   GET  /ia/estado   — verificar disponibilidad del nodo IA
 
 import logging
+import os
+from datetime import datetime, timezone
 import random
 import uuid
 import os
@@ -21,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ollama import AsyncClient
 from dotenv import load_dotenv
 
-from app.models import MensajeCreate, MensajeResponse, RespuestaExito
+from app.models import MensajeCreate, MensajeResponse, RespuestaExito, IAModoRequest
 from app.database import get_connection, release_connection
 from app.cache import (
     cachear_usuario,
@@ -379,3 +381,76 @@ async def estado_ia():
             status_code=503,
             detail=f"{NOMBRE_IA} está descansando — el motor de IA no responde."
         )
+
+
+# ── Contexto RAM para modo sin memoria ────────────────────────────────────
+
+_lumi_contextos: dict[str, list[dict]] = {}  # key: usuario_id
+_LUMI_WINDOW = 10  # últimos N mensajes de la sesión
+
+
+@router.post("/mensaje/modo", response_model=MensajeResponse, status_code=201)
+async def mensaje_a_ia_con_modo(
+    datos: IAModoRequest,
+    payload: dict = Depends(autenticar_usuario_actual),
+):
+    """
+    Envía un mensaje a Lumi con selector de modo.
+
+    - con_memoria: usa historial persistido y guarda todo en DB.
+    - sin_memoria: usa contexto RAM por sesión sin persistir nada.
+    """
+    if datos.emisor_id != payload["sub"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    ia_id = await obtener_id_ia()
+    if not ia_id:
+        raise HTTPException(
+            status_code=503,
+            detail="Lumi no está inicializada.",
+        )
+
+    if datos.modo == "sin_memoria":
+        return await _responder_sin_memoria(datos, ia_id, payload["sub"])
+
+    # con_memoria: delegar al flujo existente
+    return await mensaje_a_ia(
+        MensajeCreate(
+            emisor_id=datos.emisor_id,
+            receptor_id=datos.receptor_id,
+            contenido=datos.contenido,
+        ),
+        payload,
+    )
+
+
+async def _responder_sin_memoria(
+    datos: IAModoRequest, ia_id: str, usuario_id: str
+) -> MensajeResponse:
+    """Genera respuesta sin memoria: contexto RAM, sin DB."""
+    ctx = _lumi_contextos.setdefault(usuario_id, [])
+
+    # Construir contexto desde RAM
+    historial = []
+    for entry in ctx:
+        historial.append({
+            "es_usuario": entry["es_usuario"],
+            "contenido": entry["contenido"],
+        })
+
+    respuesta_texto, _ = await generar_respuesta_ia(datos.contenido, historial)
+
+    # Actualizar RAM (rolling window)
+    ctx.append({"es_usuario": True, "contenido": datos.contenido})
+    ctx.append({"es_usuario": False, "contenido": respuesta_texto})
+    if len(ctx) > _LUMI_WINDOW:
+        _lumi_contextos[usuario_id] = ctx[-_LUMI_WINDOW:]
+
+    return {
+        "id": None,  # pyright: ignore[reportReturnType]
+        "emisor_id": ia_id,
+        "receptor_id": usuario_id,
+        "contenido": respuesta_texto,
+        "timestamp": datetime.now(timezone.utc),
+        "expira_en": None,
+    }

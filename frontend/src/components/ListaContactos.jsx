@@ -5,7 +5,7 @@
 // estilo WhatsApp/Telegram.
 
 import { useState, useMemo } from "react";
-import { Search, Bot, User, PenSquare } from "lucide-react";
+import { Search, Bot, User, Users, PenSquare } from "lucide-react";
 import { formatearHora } from "../utils/tiempo";
 import { getAvatarStyle } from "../utils/avatarColors";
 import IndicadorPresencia from "./IndicadorPresencia";
@@ -13,8 +13,10 @@ import ModalNuevoChat from "./ModalNuevoChat";
 
 export default function ListaContactos({
 	contactos,
+	grupos = [],
 	contactoActivo,
 	onSeleccionar,
+	onSeleccionarGrupo,
 	usuarioActual,
 	iaId,
 	presencias = {},
@@ -161,7 +163,63 @@ export default function ListaContactos({
 					</>
 				)}
 
-				{humanos.length === 0 && !lumi ? (
+				{/* Grupos unidos */}
+				{grupos.map((grupo) => {
+					const activo =
+						contactoActivo?.tipo === "grupo" && contactoActivo?.id === grupo.id;
+					const cantidadNoLeidosGrupo = noLeidos.porGrupo?.[grupo.id] || 0;
+					return (
+						<button
+							key={grupo.id}
+							onClick={() => onSeleccionarGrupo?.(grupo)}
+							className={`w-full flex items-center gap-3 px-4 py-3
+								transition text-left border-b border-vibe-800/50
+								${
+									activo
+										? "bg-cyan-500/10 border-l-4 border-l-cyan-500"
+										: "hover:bg-vibe-800/50"
+								}`}
+						>
+							<div
+								className="w-11 h-11 rounded-full bg-cyan-500/15
+								flex items-center justify-center flex-shrink-0"
+							>
+								<Users size={20} className="text-cyan-400" />
+							</div>
+							<div className="flex-1 min-w-0">
+								<div className="flex items-center justify-between gap-2">
+									<span
+										className={`text-sm font-medium truncate
+										${
+											activo
+												? "text-cyan-400"
+												: cantidadNoLeidosGrupo > 0
+													? "text-vibe-100 font-semibold"
+													: "text-vibe-200"
+										}`}
+									>
+										{grupo.nombre}
+									</span>
+									{cantidadNoLeidosGrupo > 0 && (
+										<span
+											className="flex-shrink-0 min-w-[20px] h-5 px-1.5
+											rounded-full bg-cyan-500 text-vibe-950 text-xs font-bold
+											flex items-center justify-center shadow-glow-cyan"
+										>
+											{cantidadNoLeidosGrupo > 9 ? "9+" : cantidadNoLeidosGrupo}
+										</span>
+									)}
+								</div>
+								<p className="text-xs text-vibe-500">Grupo público</p>
+							</div>
+						</button>
+					);
+				})}
+				{grupos.length > 0 && humanos.length > 0 && (
+					<div className="my-2 mx-4 h-px bg-vibe-700/60" />
+				)}
+
+				{humanos.length === 0 && !lumi && grupos.length === 0 ? (
 					<div
 						className="flex flex-col items-center justify-center
                           h-40 text-vibe-500 text-sm gap-2"
@@ -193,6 +251,7 @@ export default function ListaContactos({
 					usuarioActual={usuarioActual}
 					iaId={iaId}
 					onSeleccionar={onSeleccionar}
+					onSeleccionarGrupo={onSeleccionarGrupo}
 					onCerrar={() => setMostrarModalNuevoChat(false)}
 				/>
 			)}

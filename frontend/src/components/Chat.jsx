@@ -3,12 +3,25 @@
 // Header muestra estado de presencia real (En línea / Activo hace X / Reposando).
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Bot, User, Loader, Shield, Flame } from "lucide-react";
+import {
+	Send,
+	Bot,
+	User,
+	Loader,
+	Shield,
+	Flame,
+	Users,
+	Eye,
+	EyeOff,
+} from "lucide-react";
 import Mensaje from "./Mensaje";
 import {
 	enviarMensaje,
 	enviarMensajeIA,
+	enviarMensajeSinMemoria,
 	obtenerConversacionBilateral,
+	mensajesGrupo,
+	enviarMensajeGrupo,
 } from "../services/api";
 import { esHoy } from "../utils/tiempo";
 import { getAvatarStyle } from "../utils/avatarColors";
@@ -21,14 +34,21 @@ export default function Chat({
 	iaId,
 	presencias = {},
 	actualizacionMensajes = 0,
+	mensajeSinMemoriaEntrante = null,
+	onConsumirSinMemoria = null,
 }) {
 	const [mensajes, setMensajes] = useState([]);
 	const [texto, setTexto] = useState("");
+	const [aviso, setAviso] = useState("");
 	const [enviando, setEnviando] = useState(false);
 	const [cargando, setCargando] = useState(true);
 	const [modoAutodestructivo, setModoAutodestructivo] = useState(false);
+	const [modo, setModo] = useState("con_memoria");
+	const esSinMemoria = modo === "sin_memoria";
+	const [mensajesLocales, setMensajesLocales] = useState([]);
 	const finalRef = useRef(null);
 	const esIA = contacto.id === iaId;
+	const esGrupo = contacto.tipo === "grupo";
 
 	// Presencia del contacto que estoy viendo
 	const presencia = presencias[contacto.id];
@@ -37,15 +57,28 @@ export default function Chat({
 
 	const cargarConversacion = useCallback(async () => {
 		try {
-			const data = await obtenerConversacionBilateral(
-				usuarioActual.id,
-				contacto.id,
-			);
+			let data;
+			if (esGrupo) {
+				data = await mensajesGrupo(contacto.id);
+			} else if (!esSinMemoria) {
+				data = await obtenerConversacionBilateral(
+					usuarioActual.id,
+					contacto.id,
+				);
+			} else {
+				data = [];
+			}
 			setMensajes(data);
 		} catch (error) {
 			console.error("Error al cargar mensajes:", error);
 		}
-	}, [usuarioActual.id, contacto.id]);
+	}, [usuarioActual.id, contacto.id, esGrupo, esSinMemoria]);
+
+	useEffect(() => {
+		setMensajesLocales([]);
+		setAviso("");
+		setModo(contacto.modoInicial || "con_memoria");
+	}, [contacto.id, contacto.modoInicial]);
 
 	useEffect(() => {
 		setCargando(true);
@@ -60,23 +93,92 @@ export default function Chat({
 
 	useEffect(() => {
 		finalRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, [mensajes]);
+	}, [mensajes, mensajesLocales]);
+
+	// Recibir mensaje sin memoria desde WebSocket
+	useEffect(() => {
+		if (!mensajeSinMemoriaEntrante || !esSinMemoria) return;
+		if (mensajeSinMemoriaEntrante.emisor_id !== contacto.id) return;
+
+		setMensajesLocales((prev) => [
+			...prev,
+			{
+				id: null,
+				emisor_id: mensajeSinMemoriaEntrante.emisor_id,
+				receptor_id: usuarioActual.id,
+				contenido: mensajeSinMemoriaEntrante.contenido,
+				timestamp: new Date().toISOString(),
+			},
+		]);
+		onConsumirSinMemoria?.();
+	}, [
+		mensajeSinMemoriaEntrante,
+		esSinMemoria,
+		contacto.id,
+		usuarioActual.id,
+		onConsumirSinMemoria,
+	]);
 
 	async function handleEnviar() {
 		const contenido = texto.trim();
 		if (!contenido || enviando) return;
 
 		setEnviando(true);
+		setAviso("");
 		setTexto("");
 
 		try {
-			const expiraEn = modoAutodestructivo ? 30 : null; // 30 segundos para autodestrucción
-			if (esIA) {
-				await enviarMensajeIA(usuarioActual.id, iaId, contenido);
+			if (esGrupo) {
+				await enviarMensajeGrupo(contacto.id, contenido);
+			} else if (esIA) {
+				const respuesta = await enviarMensajeIA(
+					usuarioActual.id,
+					iaId,
+					contenido,
+					modo,
+				);
+				if (esSinMemoria) {
+					setMensajesLocales((prev) => [
+						...prev,
+						{
+							local_id: `local-user-${Date.now()}`,
+							emisor_id: usuarioActual.id,
+							receptor_id: iaId,
+							contenido,
+							timestamp: new Date().toISOString(),
+						},
+						{ ...respuesta, local_id: `local-ia-${Date.now()}` },
+					]);
+				}
+			} else if (esSinMemoria && !esIA) {
+				const respuesta = await enviarMensajeSinMemoria(
+					usuarioActual.id,
+					contacto.id,
+					contenido,
+				);
+				if (!respuesta.entregado) {
+					setTexto(contenido);
+					setAviso(
+						respuesta.mensaje ||
+							"No se pudo entregar el mensaje sin memoria en vivo.",
+					);
+					return;
+				}
+				setMensajesLocales((prev) => [
+					...prev,
+					{
+						local_id: `local-user-${Date.now()}`,
+						emisor_id: usuarioActual.id,
+						receptor_id: contacto.id,
+						contenido,
+						timestamp: new Date().toISOString(),
+					},
+				]);
 			} else {
+				const expiraEn = modoAutodestructivo ? 30 : null;
 				await enviarMensaje(usuarioActual.id, contacto.id, contenido, expiraEn);
 			}
-			await cargarConversacion();
+			if (!esSinMemoria) await cargarConversacion();
 		} catch (error) {
 			console.error("Error al enviar mensaje:", error);
 			setTexto(contenido);
@@ -94,13 +196,14 @@ export default function Chat({
 
 	function renderMensajes() {
 		let fechaAnterior = null;
-		return mensajes.map((mensaje, index) => {
+		const todosMensajes = [...mensajes, ...mensajesLocales];
+		return todosMensajes.map((mensaje, index) => {
 			const fechaActual = new Date(mensaje.timestamp).toDateString();
 			const mostrarFecha = fechaActual !== fechaAnterior;
 			fechaAnterior = fechaActual;
 
 			return (
-				<div key={mensaje.id || index}>
+				<div key={mensaje.id || mensaje.local_id || index}>
 					{mostrarFecha && (
 						<div className="flex items-center justify-center my-4">
 							<span
@@ -116,7 +219,11 @@ export default function Chat({
 						usuarioActual={usuarioActual}
 						iaId={iaId}
 						nombreEmisor={
-							mensaje.emisor_id === contacto.id ? contacto.nombre : null
+							esGrupo
+								? mensaje.emisor_nombre || null
+								: mensaje.emisor_id === contacto.id
+									? contacto.nombre
+									: null
 						}
 					/>
 				</div>
@@ -126,6 +233,8 @@ export default function Chat({
 
 	// Texto descriptivo del estado del contacto en el header
 	function getTextoEstado() {
+		if (esGrupo) return "Grupo público";
+		if (esSinMemoria) return "Sin memoria · No se guarda historial";
 		if (esIA) {
 			if (estado === "online")
 				return `Modelo: ${import.meta.env.VITE_OLLAMA_MODEL || "llama3.2:3b"}`;
@@ -143,6 +252,8 @@ export default function Chat({
 
 	// Color del texto según el estado
 	function getColorEstado() {
+		if (esGrupo) return "text-cyan-400";
+		if (esSinMemoria) return "text-amber-400";
 		if (estado === "online") return esIA ? "text-lumi-400" : "text-online-400";
 		if (estado === "reposando") return "text-amber-400";
 		return "text-vibe-500";
@@ -153,20 +264,30 @@ export default function Chat({
 			{/* Encabezado de la conversación */}
 			<div
 				className="bg-vibe-950 border-b border-vibe-800 px-6 py-4
-                      flex items-center gap-3"
+					flex items-center gap-3"
 			>
-				{/* Avatar del contacto con indicador de presencia */}
-				<div className="relative flex-shrink-0">
-					<div
-						style={getAvatarStyle(contacto.nombre, esIA)}
-						className={`w-10 h-10 rounded-full flex items-center justify-center
-                        font-semibold
-                        ${esIA ? "text-white" : ""}`}
-					>
-						{esIA ? <Bot size={20} /> : contacto.nombre.charAt(0).toUpperCase()}
+				{/* Avatar o ícono de grupo */}
+				{esGrupo ? (
+					<div className="w-10 h-10 rounded-full bg-cyan-500/15 flex items-center justify-center flex-shrink-0">
+						<Users size={20} className="text-cyan-400" />
 					</div>
-					<IndicadorPresencia estado={estado} tamano="sm" />
-				</div>
+				) : (
+					<div className="relative flex-shrink-0">
+						<div
+							style={getAvatarStyle(contacto.nombre, esIA)}
+							className={`w-10 h-10 rounded-full flex items-center justify-center
+						font-semibold
+						${esIA ? "text-white" : ""}`}
+						>
+							{esIA ? (
+								<Bot size={20} />
+							) : (
+								contacto.nombre.charAt(0).toUpperCase()
+							)}
+						</div>
+						<IndicadorPresencia estado={estado} tamano="sm" />
+					</div>
+				)}
 
 				<div className="flex-1">
 					<h3 className="font-semibold text-vibe-100 text-sm">
@@ -185,6 +306,23 @@ export default function Chat({
 						{getTextoEstado()}
 					</p>
 				</div>
+				{!esGrupo && (
+					<button
+						title={esSinMemoria ? "Modo sin memoria" : "Modo con memoria"}
+						onClick={() => {
+							setMensajesLocales([]);
+							setAviso("");
+							setModo(esSinMemoria ? "con_memoria" : "sin_memoria");
+						}}
+						className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
+							esSinMemoria
+								? "bg-amber-500/15 text-amber-400"
+								: "bg-vibe-800 text-vibe-500 hover:text-cyan-400"
+						}`}
+					>
+						{esSinMemoria ? <EyeOff size={15} /> : <Eye size={15} />}
+					</button>
+				)}
 				<Shield size={18} className="text-cyan-500" />
 			</div>
 
@@ -198,26 +336,36 @@ export default function Chat({
 						<Loader size={18} className="animate-spin" />
 						<span>Cargando conversación...</span>
 					</div>
-				) : mensajes.length === 0 ? (
+				) : mensajes.length === 0 && mensajesLocales.length === 0 ? (
 					<div
 						className="flex flex-col items-center justify-center
                           h-full gap-3 text-vibe-500"
 					>
 						<div
 							className={`w-16 h-16 rounded-full flex items-center
-                              justify-center
-                              ${esIA ? "bg-lumi-400/15" : "bg-cyan-500/15"}`}
+								justify-center
+								${
+									esGrupo
+										? "bg-cyan-500/15"
+										: esIA
+											? "bg-lumi-400/15"
+											: "bg-cyan-500/15"
+								}`}
 						>
-							{esIA ? (
+							{esGrupo ? (
+								<Users size={32} className="text-cyan-400" />
+							) : esIA ? (
 								<Bot size={32} className="text-lumi-400" />
 							) : (
 								<User size={32} className="text-cyan-400" />
 							)}
 						</div>
 						<p className="text-sm font-medium text-vibe-300">
-							{esIA
-								? "¡Hola! Soy Lumi, tu compañera virtual. ¿En qué puedo acompañarte?"
-								: `Inicia una conversación con ${contacto.nombre}`}
+							{esGrupo
+								? `Bienvenido a ${contacto.nombre}`
+								: esIA
+									? "¡Hola! Soy Lumi, tu compañera virtual. ¿En qué puedo acompañarte?"
+									: `Inicia una conversación con ${contacto.nombre}`}
 						</p>
 					</div>
 				) : (
@@ -234,10 +382,13 @@ export default function Chat({
 			</div>
 
 			{/* Input de mensaje */}
-			<div
-				className="bg-vibe-950 border-t border-vibe-800 px-4 py-3
-                      flex items-end gap-3"
-			>
+			<div className="bg-vibe-950 border-t border-vibe-800 px-4 py-3">
+				{aviso && (
+					<p className="mb-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+						{aviso}
+					</p>
+				)}
+				<div className="flex items-end gap-3">
 				<button
 					title={
 						modoAutodestructivo
@@ -257,7 +408,10 @@ export default function Chat({
 
 				<textarea
 					value={texto}
-					onChange={(e) => setTexto(e.target.value)}
+					onChange={(e) => {
+						setTexto(e.target.value);
+						setAviso("");
+					}}
 					onKeyDown={handleKeyDown}
 					placeholder={
 						modoAutodestructivo
@@ -292,6 +446,7 @@ export default function Chat({
 						<Send size={18} />
 					)}
 				</button>
+				</div>
 			</div>
 		</div>
 	);
