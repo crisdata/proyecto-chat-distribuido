@@ -60,7 +60,8 @@ async def notificar_receptor(evento: EventoMensaje):
     await manager.notify(evento.receptor_id, {
         "tipo": "nuevo_mensaje",
         "emisor_id": evento.emisor_id,
-        "emisor_nombre": evento.emisor_nombre
+        "emisor_nombre": evento.emisor_nombre,
+        "no_leidos_delta": 1
     })
 
     conectado = manager.esta_conectado(evento.receptor_id)

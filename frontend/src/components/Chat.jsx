@@ -8,7 +8,6 @@ import Mensaje from "./Mensaje";
 import {
 	enviarMensaje,
 	enviarMensajeIA,
-	crearWebSocket,
 	obtenerConversacionBilateral,
 } from "../services/api";
 import { esHoy } from "../utils/tiempo";
@@ -21,6 +20,7 @@ export default function Chat({
 	contacto,
 	iaId,
 	presencias = {},
+	actualizacionMensajes = 0,
 }) {
 	const [mensajes, setMensajes] = useState([]);
 	const [texto, setTexto] = useState("");
@@ -50,19 +50,12 @@ export default function Chat({
 		setCargando(true);
 		setMensajes([]);
 		cargarConversacion().finally(() => setCargando(false));
+	}, [contacto.id, cargarConversacion]);
 
-		const cerrarWS = crearWebSocket(
-			usuarioActual.id,
-			(datos) => {
-				if (datos.tipo === "nuevo_mensaje" && datos.emisor_id === contacto.id) {
-					cargarConversacion();
-				}
-			},
-			() => {}, // estado WS no se usa aquí (lo maneja App.jsx)
-		);
-
-		return () => cerrarWS();
-	}, [usuarioActual.id, contacto.id, cargarConversacion]);
+	useEffect(() => {
+		if (actualizacionMensajes === 0) return;
+		cargarConversacion();
+	}, [actualizacionMensajes, cargarConversacion]);
 
 	useEffect(() => {
 		finalRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -5,204 +5,248 @@
 // Los polling de presencia y no leídos viven aquí porque App.jsx es el
 // único componente que NUNCA se desmonta mientras hay sesión activa.
 
-import { useState, useEffect, useRef, useMemo } from 'react'
-import { MessageCircle } from 'lucide-react'
-import Registro from './components/Registro'
-import Sidebar from './components/Sidebar'
-import ListaContactos from './components/ListaContactos'
-import Chat from './components/Chat'
+import { useState, useEffect, useRef, useMemo } from "react";
+import { MessageCircle } from "lucide-react";
+import Registro from "./components/Registro";
+import Sidebar from "./components/Sidebar";
+import ListaContactos from "./components/ListaContactos";
+import Chat from "./components/Chat";
 import {
-  listarUsuarios,
-  obtenerIdIA,
-  obtenerUsuarioActual,
-  obtenerNoLeidos,
-  marcarComoLeidos,
-  setToken
-} from './services/api'
-import { usePresencia } from './hooks/usePresencia'
+	listarUsuarios,
+	obtenerIdIA,
+	obtenerUsuarioActual,
+	obtenerNoLeidos,
+	marcarComoLeidos,
+	crearWebSocket,
+	setToken,
+} from "./services/api";
+import { usePresencia } from "./hooks/usePresencia";
 
 export default function App() {
-  const [usuario, setUsuario] = useState(null)
-  const [contactos, setContactos] = useState([])
-  const [contactoActivo, setContactoActivo] = useState(null)
-  const [iaId, setIaId] = useState(null)
-  const [cargandoSesion, setCargandoSesion] = useState(true)
-  const [noLeidos, setNoLeidos] = useState({ total: 0, porContacto: {} })
+	const [usuario, setUsuario] = useState(null);
+	const [contactos, setContactos] = useState([]);
+	const [contactoActivo, setContactoActivo] = useState(null);
+	const [iaId, setIaId] = useState(null);
+	const [cargandoSesion, setCargandoSesion] = useState(true);
+	const [noLeidos, setNoLeidos] = useState({ total: 0, porContacto: {} });
+	const [actualizacionMensajes, setActualizacionMensajes] = useState(0);
 
-  const huellaContactosRef = useRef('')
+	const huellaContactosRef = useRef("");
+	const contactoActivoRef = useRef(null);
+	contactoActivoRef.current = contactoActivo;
 
-  const idsParaPresencia = useMemo(
-    () => contactos.map(c => c.id),
-    [contactos]
-  )
+	const idsParaPresencia = useMemo(
+		() => contactos.map((c) => c.id),
+		[contactos],
+	);
 
-  const presencias = usePresencia(idsParaPresencia)
+	const presencias = usePresencia(idsParaPresencia);
 
-  // Restaurar sesión al montar
-  useEffect(() => {
-    async function restaurarSesion() {
-      const usuarioRecuperado = await obtenerUsuarioActual()
-      if (usuarioRecuperado) {
-        setUsuario(usuarioRecuperado)
-      }
-      setCargandoSesion(false)
-    }
-    restaurarSesion()
-  }, [])
+	// Restaurar sesión al montar
+	useEffect(() => {
+		async function restaurarSesion() {
+			const usuarioRecuperado = await obtenerUsuarioActual();
+			if (usuarioRecuperado) {
+				setUsuario(usuarioRecuperado);
+			}
+			setCargandoSesion(false);
+		}
+		restaurarSesion();
+	}, []);
 
-  // Polling de contactos cada 10s
-  useEffect(() => {
-    if (!usuario) return
+	// Polling de contactos cada 10s
+	useEffect(() => {
+		if (!usuario) return;
 
-    async function cargarDatos() {
-      try {
-        const [usuarios, idIA] = await Promise.all([
-          listarUsuarios(),
-          obtenerIdIA()
-        ])
+		async function cargarDatos() {
+			try {
+				const [usuarios, idIA] = await Promise.all([
+					listarUsuarios(),
+					obtenerIdIA(),
+				]);
 
-        const nuevosContactos = usuarios.filter(u => u.id !== usuario.id)
-        const nuevaHuella = nuevosContactos
-          .map(c => `${c.id}:${c.nombre}`)
-          .sort()
-          .join('|')
+				const nuevosContactos = usuarios.filter((u) => u.id !== usuario.id);
+				const nuevaHuella = nuevosContactos
+					.map((c) => `${c.id}:${c.nombre}`)
+					.sort()
+					.join("|");
 
-        if (nuevaHuella !== huellaContactosRef.current) {
-          huellaContactosRef.current = nuevaHuella
-          setContactos(nuevosContactos)
-        }
+				if (nuevaHuella !== huellaContactosRef.current) {
+					huellaContactosRef.current = nuevaHuella;
+					setContactos(nuevosContactos);
+				}
 
-        setIaId(prev => prev === idIA ? prev : idIA)
-      } catch (error) {
-        console.error('Error al cargar contactos:', error)
-      }
-    }
+				setIaId((prev) => (prev === idIA ? prev : idIA));
+			} catch (error) {
+				console.error("Error al cargar contactos:", error);
+			}
+		}
 
-    cargarDatos()
-    const intervalo = setInterval(cargarDatos, 10000)
-    return () => clearInterval(intervalo)
-  }, [usuario])
+		cargarDatos();
+		const intervalo = setInterval(cargarDatos, 10000);
+		return () => clearInterval(intervalo);
+	}, [usuario]);
 
-  // Polling de mensajes no leídos cada 3s.
-  // Usa una ref con el id del usuario para que el polling sea
-  // estable y no se reinicie por re-renders.
-  const usuarioIdRef = useRef(null)
-  usuarioIdRef.current = usuario?.id || null
+	// No leídos: carga inicial + reconciliación lenta.
+	// Las actualizaciones normales llegan por WebSocket para evitar
+	// consultar al backend cada 3 segundos.
+	useEffect(() => {
+		if (!usuario) {
+			setNoLeidos({ total: 0, porContacto: {} });
+			return;
+		}
 
-  useEffect(() => {
-    if (!usuario) {
-      setNoLeidos({ total: 0, porContacto: {} })
-      return
-    }
+		let cancelado = false;
 
-    let cancelado = false
+		async function actualizar() {
+			const data = await obtenerNoLeidos(usuario.id);
+			if (cancelado) return;
 
-    async function actualizar() {
-      const uid = usuarioIdRef.current
-      if (!uid) return
+			setNoLeidos({
+				total: data.no_leidos || 0,
+				porContacto: data.por_contacto || {},
+			});
+		}
 
-      const data = await obtenerNoLeidos(uid)
-      if (cancelado) return
+		actualizar();
+		const intervalo = setInterval(actualizar, 60000);
 
-      setNoLeidos({
-        total: data.no_leidos || 0,
-        porContacto: data.por_contacto || {}
-      })
-    }
+		return () => {
+			cancelado = true;
+			clearInterval(intervalo);
+		};
+	}, [usuario]);
 
-    actualizar()
-    const intervalo = setInterval(actualizar, 3000)
+	// WebSocket único por sesión.
+	// Evita abrir/cerrar conexiones al cambiar de contacto y permite
+	// actualizar badges de no leídos con eventos push del worker.
+	useEffect(() => {
+		if (!usuario) return;
 
-    return () => {
-      cancelado = true
-      clearInterval(intervalo)
-    }
-  }, [usuario])
+		const cerrarWS = crearWebSocket(
+			usuario.id,
+			(datos) => {
+				if (datos.tipo !== "nuevo_mensaje") return;
 
-  // Al seleccionar un contacto, marcarlo como leído.
-  // Esto borra el badge específico de ese contacto.
-  async function handleSeleccionarContacto(contacto) {
-    setContactoActivo(contacto)
-    if (usuario && contacto) {
-      await marcarComoLeidos(usuario.id, contacto.id)
-      // Refrescar inmediatamente para que el badge desaparezca
-      const data = await obtenerNoLeidos(usuario.id)
-      setNoLeidos({
-        total: data.no_leidos || 0,
-        porContacto: data.por_contacto || {}
-      })
-    }
-  }
+				const emisorId = datos.emisor_id;
+				const delta = datos.no_leidos_delta || 1;
+				const contactoActivoActual = contactoActivoRef.current;
 
-  function handleLogout() {
-    setToken(null)
-    setUsuario(null)
-    setContactos([])
-    setContactoActivo(null)
-    setIaId(null)
-    setNoLeidos({ total: 0, porContacto: {} })
-    huellaContactosRef.current = ''
-  }
+				if (contactoActivoActual?.id === emisorId) {
+					setActualizacionMensajes((prev) => prev + 1);
+					marcarComoLeidos(usuario.id, emisorId).catch((error) => {
+						console.warn("Error al marcar mensaje activo como leído:", error);
+					});
+					return;
+				}
 
-  if (cargandoSesion) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-vibe-950">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-vibe flex items-center
-                          justify-center shadow-glow-cyan animate-pulse">
-            <MessageCircle size={24} className="text-white" />
-          </div>
-          <div className="text-vibe-400 text-sm">Cargando Vibe...</div>
-        </div>
-      </div>
-    )
-  }
+				setNoLeidos((prev) => {
+					const actualContacto = prev.porContacto[emisorId] || 0;
+					return {
+						total: prev.total + delta,
+						porContacto: {
+							...prev.porContacto,
+							[emisorId]: actualContacto + delta,
+						},
+					};
+				});
+			},
+			() => {},
+		);
 
-  if (!usuario) {
-    return <Registro onRegistro={setUsuario} />
-  }
+		return () => cerrarWS();
+	}, [usuario]);
 
-  return (
-    <div className="flex h-screen bg-vibe-950 overflow-hidden">
-      <Sidebar
-        usuario={usuario}
-        contactos={contactos}
-        iaId={iaId}
-        onSeleccionar={handleSeleccionarContacto}
-        onLogout={handleLogout}
-      />
+	// Al seleccionar un contacto, marcarlo como leído.
+	// Esto borra el badge específico de ese contacto.
+	async function handleSeleccionarContacto(contacto) {
+		setContactoActivo(contacto);
+		if (usuario && contacto) {
+			await marcarComoLeidos(usuario.id, contacto.id);
+			// Refrescar inmediatamente para que el badge desaparezca
+			const data = await obtenerNoLeidos(usuario.id);
+			setNoLeidos({
+				total: data.no_leidos || 0,
+				porContacto: data.por_contacto || {},
+			});
+		}
+	}
 
-      <ListaContactos
-        contactos={contactos}
-        contactoActivo={contactoActivo}
-        onSeleccionar={handleSeleccionarContacto}
-        usuarioActual={usuario}
-        iaId={iaId}
-        presencias={presencias}
-        noLeidos={noLeidos}
-      />
+	function handleLogout() {
+		setToken(null);
+		setUsuario(null);
+		setContactos([]);
+		setContactoActivo(null);
+		setIaId(null);
+		setNoLeidos({ total: 0, porContacto: {} });
+		setActualizacionMensajes(0);
+		huellaContactosRef.current = "";
+	}
 
-      {contactoActivo ? (
-        <Chat
-          usuarioActual={usuario}
-          contacto={contactoActivo}
-          iaId={iaId}
-          presencias={presencias}
-        />
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center bg-vibe-950">
-          <div className="w-20 h-20 rounded-2xl bg-vibe-900 flex items-center
-                          justify-center mb-4 border border-vibe-800">
-            <MessageCircle size={36} className="text-vibe-600" />
-          </div>
-          <p className="text-vibe-400 text-sm">
-            Selecciona un contacto para comenzar a chatear
-          </p>
-          <p className="text-vibe-600 text-xs mt-1">
-            Vibe — conexiones reales, privacidad real
-          </p>
-        </div>
-      )}
-    </div>
-  )
+	if (cargandoSesion) {
+		return (
+			<div className="flex items-center justify-center h-screen bg-vibe-950">
+				<div className="flex flex-col items-center gap-3">
+					<div
+						className="w-12 h-12 rounded-xl bg-gradient-vibe flex items-center
+                          justify-center shadow-glow-cyan animate-pulse"
+					>
+						<MessageCircle size={24} className="text-white" />
+					</div>
+					<div className="text-vibe-400 text-sm">Cargando Vibe...</div>
+				</div>
+			</div>
+		);
+	}
+
+	if (!usuario) {
+		return <Registro onRegistro={setUsuario} />;
+	}
+
+	return (
+		<div className="flex h-screen bg-vibe-950 overflow-hidden">
+			<Sidebar
+				usuario={usuario}
+				contactos={contactos}
+				iaId={iaId}
+				onSeleccionar={handleSeleccionarContacto}
+				onLogout={handleLogout}
+			/>
+
+			<ListaContactos
+				contactos={contactos}
+				contactoActivo={contactoActivo}
+				onSeleccionar={handleSeleccionarContacto}
+				usuarioActual={usuario}
+				iaId={iaId}
+				presencias={presencias}
+				noLeidos={noLeidos}
+			/>
+
+			{contactoActivo ? (
+				<Chat
+					usuarioActual={usuario}
+					contacto={contactoActivo}
+					iaId={iaId}
+					presencias={presencias}
+					actualizacionMensajes={actualizacionMensajes}
+				/>
+			) : (
+				<div className="flex-1 flex flex-col items-center justify-center bg-vibe-950">
+					<div
+						className="w-20 h-20 rounded-2xl bg-vibe-900 flex items-center
+                          justify-center mb-4 border border-vibe-800"
+					>
+						<MessageCircle size={36} className="text-vibe-600" />
+					</div>
+					<p className="text-vibe-400 text-sm">
+						Selecciona un contacto para comenzar a chatear
+					</p>
+					<p className="text-vibe-600 text-xs mt-1">
+						Vibe — conexiones reales, privacidad real
+					</p>
+				</div>
+			)}
+		</div>
+	);
 }
