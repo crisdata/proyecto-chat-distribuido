@@ -9,13 +9,12 @@ import {
 	enviarMensaje,
 	enviarMensajeIA,
 	crearWebSocket,
+	obtenerConversacionBilateral,
 } from "../services/api";
 import { esHoy } from "../utils/tiempo";
 import { getAvatarStyle } from "../utils/avatarColors";
 import { formatearTiempoRelativo } from "../utils/tiempo";
 import IndicadorPresencia from "./IndicadorPresencia";
-
-const BASE_URL = "/api";
 
 export default function Chat({
 	usuarioActual,
@@ -37,11 +36,10 @@ export default function Chat({
 
 	const cargarConversacion = useCallback(async () => {
 		try {
-			const res = await fetch(
-				`${BASE_URL}/conversacion/${usuarioActual.id}/${contacto.id}`,
+			const data = await obtenerConversacionBilateral(
+				usuarioActual.id,
+				contacto.id,
 			);
-			if (!res.ok) throw new Error("Error al cargar conversación");
-			const data = await res.json();
 			setMensajes(data);
 		} catch (error) {
 			console.error("Error al cargar mensajes:", error);

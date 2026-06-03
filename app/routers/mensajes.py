@@ -12,7 +12,7 @@
 #   3. Publica evento en RabbitMQ para procesamiento asíncrono
 #   4. El worker consume el evento, actualiza Redis y notifica via WebSocket
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.models import (
     MensajeCreate, MensajeResponse,
     NoLeidosResponse
@@ -259,11 +259,20 @@ async def marcar_como_leidos(
 async def consultar_conversacion_bilateral(
     usuario_id: str,
     contacto_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    before_id: int | None = Query(None, ge=1),
     payload: dict = Depends(autenticar_usuario_actual)
 ):
     """
-    Retorna el historial completo de mensajes entre dos usuarios,
-    en ambas direcciones, ordenados cronológicamente.
+    Retorna una página de mensajes entre dos usuarios.
+
+    Usa paginación por cursor:
+    - limit: cantidad de mensajes a retornar (1-100, default 50)
+    - before_id: si se envía, trae mensajes con id menor a ese valor
+
+    Internamente consulta en orden descendente para obtener los últimos N
+    mensajes de forma eficiente, y luego invierte el resultado para que
+    el frontend conserve orden cronológico ascendente.
     """
     if usuario_id != payload["sub"]:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -285,15 +294,24 @@ async def consultar_conversacion_bilateral(
             )
 
         async with conn.cursor() as cursor:
+            where_cursor = ""
+            params: list[object] = [usuario_id, contacto_id, contacto_id, usuario_id]
+            if before_id is not None:
+                where_cursor = " AND id < %s"
+                params.append(before_id)
+            params.append(limit)
+
             await cursor.execute(
-                """SELECT id, emisor_id, receptor_id, contenido, timestamp
+                f"""SELECT id, emisor_id, receptor_id, contenido, timestamp
                    FROM mensajes
-                   WHERE (emisor_id = %s AND receptor_id = %s)
-                      OR (emisor_id = %s AND receptor_id = %s)
-                   ORDER BY timestamp ASC""",
-                (usuario_id, contacto_id, contacto_id, usuario_id)
+                   WHERE ((emisor_id = %s AND receptor_id = %s)
+                      OR (emisor_id = %s AND receptor_id = %s))
+                      {where_cursor}
+                   ORDER BY id DESC
+                   LIMIT %s""",
+                tuple(params)
             )
-            mensajes = await cursor.fetchall()
+            mensajes = list(reversed(await cursor.fetchall()))
 
         return [
             {

@@ -102,7 +102,25 @@ export async function enviarMensaje(emisor_id, receptor_id, contenido) {
 }
 
 export async function obtenerConversacion(usuario_id) {
-	const res = await fetch(`${BASE_URL}/conversacion/${usuario_id}`);
+	const res = await fetch(`${BASE_URL}/conversacion/${usuario_id}`, {
+		headers: authHeaders(),
+	});
+	if (!res.ok) throw new Error("Error al obtener conversación");
+	return res.json();
+}
+
+export async function obtenerConversacionBilateral(
+	usuarioId,
+	contactoId,
+	{ limit = 50, beforeId = null } = {},
+) {
+	const params = new URLSearchParams({ limit: String(limit) });
+	if (beforeId) params.set("before_id", String(beforeId));
+
+	const res = await fetch(
+		`${BASE_URL}/conversacion/${usuarioId}/${contactoId}?${params.toString()}`,
+		{ headers: authHeaders() },
+	);
 	if (!res.ok) throw new Error("Error al obtener conversación");
 	return res.json();
 }
@@ -113,7 +131,9 @@ export async function obtenerConversacion(usuario_id) {
  */
 export async function obtenerNoLeidos(usuarioId) {
 	try {
-		const res = await fetch(`${BASE_URL}/no_leidos/${usuarioId}`);
+		const res = await fetch(`${BASE_URL}/no_leidos/${usuarioId}`, {
+			headers: authHeaders(),
+		});
 		if (!res.ok) return { no_leidos: 0, por_contacto: {} };
 		return await res.json();
 	} catch {
@@ -129,6 +149,7 @@ export async function marcarComoLeidos(usuarioId, contactoId) {
 	try {
 		await fetch(`${BASE_URL}/no_leidos/${usuarioId}/${contactoId}`, {
 			method: "DELETE",
+			headers: authHeaders(),
 		});
 	} catch (error) {
 		console.warn("Error al marcar como leídos:", error);
