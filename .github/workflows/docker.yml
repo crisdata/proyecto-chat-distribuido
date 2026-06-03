@@ -23,7 +23,6 @@ on:
   workflow_dispatch:
 
 jobs:
-
   # ── Tests automatizados ─────────────────────────────────────────────────
   tests:
     name: Ejecutar pruebas
