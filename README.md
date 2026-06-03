@@ -58,6 +58,7 @@ empática del sistema.
 | Característica | Descripción |
 |---|---|
 | 💬 **Chat privado entre usuarios** | Mensajes persistidos en MariaDB con autenticación JWT |
+| 🔥 **Mensajes autodestructivos** | Modo efímero: los mensajes se eliminan solos a los 30 segundos |
 | 🤖 **Lumi: compañera virtual con IA local** | Conversaciones empáticas sin enviar datos a terceros |
 | 🟢 **Sistema de presencia en tiempo real** | Indicadores de conexión con TTL en Redis |
 | 🔔 **Notificaciones por contacto** | Contadores individualizados estilo WhatsApp |
@@ -93,53 +94,55 @@ siguiente.
 > en la sección [Notas por sistema operativo](#notas-por-sistema-operativo)
 > más abajo.**
 
-### Recursos de hardware mínimos
+### Recursos de hardware
 
-- **Procesador:** 4 núcleos (Intel i5 / AMD Ryzen 5 o superior)
-- **Memoria RAM:** 16 GB total
-- **Almacenamiento:** 10 GB de espacio libre en disco
-- **Conexión a internet:** requerida solo durante la instalación inicial
+| Componente | Sin Ollama (modo fallback) | Con Ollama (IA real) |
+|---|---|---|
+| **Procesador** | 2 núcleos | 4 núcleos (Intel i5 / AMD Ryzen 5 o superior) |
+| **Memoria RAM** | 4 GB | 8 GB (recomendado 16 GB) |
+| **Almacenamiento** | 2 GB libres | 10 GB libres |
+| **Internet** | Solo durante instalación | Solo durante instalación |
 
-> ⚠️ **Importante sobre la memoria:** el modelo de IA llama3.2:3b ocupa
-> aproximadamente 2 GB de RAM mientras está cargado. Los otros 9 servicios
-> (MariaDB, Redis, RabbitMQ, Nginx, FastAPI, etc.) consumen aproximadamente
-> 2-3 GB adicionales. Los 16 GB recomendados aseguran fluidez del sistema
-> operativo y el navegador funcionando simultáneamente.
+> 💡 **¿Poca RAM?** Si tu equipo tiene 4-6 GB de RAM, podés usar Vibe sin
+> descargar el modelo de IA. Lumi responderá con mensajes empáticos
+> predefinidos (modo "reposando"). La experiencia de chat entre usuarios
+> funciona igual. Los límites de memoria en Docker están configurados para
+> que el sistema no se descontrole en equipos con pocos recursos.
 
 ### Notas por sistema operativo
 
 A continuación se detalla cómo instalar cada uno de los software obligatorios
 según tu sistema operativo.
 
-#### Windows
+#### Windows (con WSL — recomendado)
 
 **Paso 1 — Instalar Docker Desktop (incluye Docker Engine + Docker Compose)**
 
 1. Descarga el instalador desde https://www.docker.com/products/docker-desktop
-2. Ejecuta el instalador y sigue los pasos predeterminados
-3. Reinicia el computador cuando termine
-4. Abre Docker Desktop desde el menú de inicio
-5. Espera a que el ícono en la barra de tareas se ponga estable (verde)
+2. Ejecuta el instalador y seguí los pasos predeterminados
+3. Reiniciá el computador cuando termine
+4. Abrí Docker Desktop desde el menú de inicio
+5. Esperá a que el ícono en la barra de tareas se ponga verde (estable)
 
-**Paso 2 — Instalar WSL2 (Subsistema de Windows para Linux)**
+**Paso 2 — Instalar WSL2**
 
-Docker Desktop en Windows requiere WSL2 para funcionar correctamente:
+Docker Desktop en Windows requiere WSL2. Normalmente Docker Desktop lo
+configura automáticamente, pero si no:
 
-1. Abre **PowerShell como administrador** (click derecho → "Ejecutar como administrador")
-2. Ejecuta:
+1. Abrí **PowerShell como administrador** (click derecho → "Ejecutar como administrador")
+2. Ejecutá:
    ```powershell
    wsl --install
    ```
-3. Reinicia el computador cuando termine
-4. Al reiniciar, se abrirá automáticamente una ventana para crear tu usuario Linux
+3. Reiniciá el computador cuando termine
 
-**Paso 3 — Abrir la terminal Ubuntu/WSL**
+**Paso 3 — Abrir la terminal Ubuntu**
 
-Busca **Ubuntu** en el menú de inicio y ábrelo. Esta es la terminal donde
-ejecutarás **todos los comandos** de este README.
+Buscá **Ubuntu** en el menú de inicio y abrilo. Esta terminal es donde
+vas a ejecutar **todos los comandos** de este README.
 
-> ⚠️ **Importante:** los comandos NO se ejecutan en PowerShell ni en CMD,
-> siempre en una **terminal Ubuntu/WSL**.
+> ⚠️ **NUNCA uses PowerShell ni CMD para los comandos de instalación.**
+> Siempre en la terminal de Ubuntu/WSL.
 
 **Paso 4 — Instalar Python, Make y Git en WSL**
 
@@ -150,7 +153,7 @@ sudo apt update
 sudo apt install -y python3 python3-pip make git
 ```
 
-**Paso 5 — Verificar todas las instalaciones**
+**Paso 5 — Verificar las instalaciones**
 
 ```bash
 docker --version
@@ -159,6 +162,9 @@ python3 --version
 make --version
 git --version
 ```
+
+> 💡 **¿No tenés WSL o preferís usar PowerShell directamente?** Saltá a la
+> sección [Windows sin WSL (PowerShell)](#windows-sin-wsl-powershell).
 
 #### Mac
 
@@ -208,6 +214,42 @@ python3 --version
 make --version
 git --version
 ```
+
+#### Windows sin WSL (PowerShell)
+
+Si no querés o no podés usar WSL, podés ejecutar Vibe directamente desde
+PowerShell. **No necesitás instalar Make ni Python** en este caso, porque
+usarás los comandos directos de Docker en lugar del Makefile.
+
+> ⚠️ **Limitación:** los comandos `make` no funcionan en PowerShell. En cada
+> paso de la instalación rápida se muestra el comando alternativo para
+> PowerShell.
+
+**Paso 1 — Instalar Docker Desktop**
+
+1. Descargalo desde https://www.docker.com/products/docker-desktop
+2. Instalalo con las opciones predeterminadas
+3. Reiniciá y abrí Docker Desktop
+4. Esperá a que el ícono esté verde
+
+**Paso 2 — Instalar Git**
+
+Descargá el instalador desde https://git-scm.com/download/win e instálalo
+con las opciones predeterminadas. Esto te da `git` y una terminal Git Bash
+que también podés usar si preferís.
+
+**Paso 3 — Verificar**
+
+Abrí PowerShell y ejecutá:
+
+```powershell
+docker --version
+docker compose version
+git --version
+```
+
+Con eso ya podés seguir la instalación rápida usando los comandos
+alternativos para PowerShell que aparecen en cada paso.
 
 #### Linux (Ubuntu/Debian)
 
@@ -287,8 +329,21 @@ correspondientes a tu sistema operativo antes de continuar.
 
 ## 🚀 Instalación rápida (recomendada)
 
-> 🎯 **Tiempo total estimado:** 5-10 minutos
+> 🎯 **Tiempo total estimado:** 3-5 minutos
 > (sin contar la descarga opcional del modelo de IA)
+
+> ### ⚠️ ¡Importante! Si estás en Windows
+>
+> **Todos los comandos de esta guía deben ejecutarse en una terminal
+> Ubuntu/WSL, NO en PowerShell ni CMD.**
+>
+> Si ya instalaste Docker Desktop, WSL viene incluido. Buscá **"Ubuntu"**
+> en el menú de inicio. Si no lo encontrás, volvé a la sección
+> [Notas por sistema operativo → Windows](#windows) para instalarlo.
+>
+> **¿No querés usar WSL?** Podés usar PowerShell, pero los comandos `make`
+> no funcionan. En ese caso, reemplazá cada `make <comando>` por su
+> equivalente directo que se muestra entre paréntesis en cada paso.
 
 Esta es la forma **más rápida y práctica** de desplegar Vibe en cualquier
 equipo. Utiliza las imágenes pre-construidas que el pipeline de CI/CD publica
@@ -300,111 +355,70 @@ completo ni construir el código fuente localmente**.
 > [Instalación para desarrollo](#-instalación-para-desarrollo) al final del
 > documento.
 
-### Paso 1 — Crear la carpeta de despliegue
+### Paso 1 — Descargar los archivos
 
-Abre tu terminal y crea una carpeta para el despliegue:
+Abrí tu terminal y ejecutá:
 
+**WSL / Mac / Linux:**
 ```bash
-mkdir vibe-deploy
-cd vibe-deploy
-```
-
-### Paso 2 — Descargar los archivos necesarios
-
-Solo se necesitan **tres archivos** del repositorio:
-
-```bash
+mkdir vibe-deploy && cd vibe-deploy
 curl -O https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/docker-compose.prod.yml
 curl -O https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/.env.example
 curl -O https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/Makefile
 mv .env.example .env
 ```
 
-> 💡 **¿Qué hace cada archivo?**
-> - `docker-compose.prod.yml`: define los 10 servicios usando las imágenes
->   ya construidas en DockerHub
-> - `.env`: contiene las variables de entorno (contraseñas, secretos)
-> - `Makefile`: contiene los atajos de comandos para operar el sistema
+**PowerShell (Windows sin WSL):**
+```powershell
+mkdir vibe-deploy; cd vibe-deploy
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/docker-compose.prod.yml" -OutFile "docker-compose.prod.yml"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/.env.example" -OutFile ".env.example"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/Makefile" -OutFile "Makefile"
+Rename-Item .env.example .env
+```
 
-### Paso 3 — Generar los secretos de seguridad
+### Paso 2 — Generar los secretos
 
-El sistema necesita dos secretos únicos para proteger las sesiones de usuarios
-y la comunicación interna entre componentes. Ejecuta estos dos comandos
-**exactamente como están** (copia y pega):
-
+**WSL / Mac / Linux:**
 ```bash
-echo "JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
-echo "WORKER_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
+python3 -c "import secrets; print('JWT_SECRET=' + secrets.token_urlsafe(48))" >> .env
+python3 -c "import secrets; print('WORKER_SECRET=' + secrets.token_urlsafe(48))" >> .env
 ```
 
-Verifica que los secretos quedaron bien:
-
-```bash
-tail -3 .env
+**PowerShell:** (no necesita Python — usa .NET)
+```powershell
+Add-Content .env "JWT_SECRET=$([Convert]::ToBase64String((1..48 | %{ Get-Random -Max 256 })))"
+Add-Content .env "WORKER_SECRET=$([Convert]::ToBase64String((1..48 | %{ Get-Random -Max 256 })))"
 ```
 
-Debes ver dos líneas con valores largos de letras y números, por ejemplo:
+### Paso 3 — Levantar el sistema
 
-```
-JWT_SECRET=k3FdR9_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345678ABCDef...
-WORKER_SECRET=p7Qw_xYz1aBcDe2FgHiJkLm3NoPqRsTuVw4567890XYZab...
-```
-
-> ⚠️ **No compartas estos secretos con nadie.** Son únicos para tu instalación.
-
-### Paso 4 — Levantar el sistema
-
-Descarga las imágenes desde DockerHub y arranca los 10 contenedores con un
-solo comando:
-
+**WSL / Mac / Linux:**
 ```bash
 make prod-up
 ```
 
-> ⏱️ **Tiempo estimado:** 3-5 minutos la primera vez (depende de tu conexión
-> a internet, ya que descarga ~600 MB de imágenes).
-
-Verás cómo Docker descarga cada imagen progresivamente. Al terminar, el
-Makefile imprime un resumen con las URLs disponibles.
-
-### Paso 5 — Verificar que todo arrancó correctamente
-
-Espera **30 segundos** para que todos los servicios pasen sus chequeos de
-salud. Luego ejecuta:
-
-```bash
-make prod-status
+**PowerShell:**
+```powershell
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-Debes ver los **10 contenedores corriendo** con estado `Up`. Algunos dirán
-adicionalmente `(healthy)` que significa que pasaron sus pruebas de salud:
+> ⏱️ La primera vez tarda 3-5 minutos (descarga ~600 MB).
 
-```
-NAMES                  STATUS
-chat_frontend          Up 1 minute
-chat_api               Up 1 minute
-chat_worker            Up 1 minute
-chat_db                Up 1 minute (healthy)
-chat_redis             Up 1 minute (healthy)
-chat_rabbitmq          Up 1 minute (healthy)
-chat_ollama            Up 1 minute (healthy)
-chat_dozzle            Up 1 minute
-chat_redis_commander   Up 1 minute
-chat_portainer         Up 1 minute
-```
+### Paso 4 — Abrir la aplicación
 
-> ❌ **Si algún contenedor dice `Restarting` o `Exited`**, revisa la sección
-> [Solución de problemas](#-solución-de-problemas-comunes).
-
-### Paso 6 — Abrir la aplicación
-
-Todo está listo. Abre tu navegador favorito (Chrome, Firefox, Edge, Brave) en:
+Esperá 30 segundos y abrí tu navegador en:
 
 ### 👉 **http://localhost**
 
-Verás la pantalla de registro de Vibe. Escribe cualquier nombre y entra al chat.
+🎉 **¡Listo!** Registrate con cualquier nombre y empezá a chatear.
 
-🎉 **¡Felicidades! Acabas de desplegar Vibe en tu equipo.**
+> 💡 **¿Querés activar la IA?** Ejecutá `make prod-pull-model` (o en
+> PowerShell:
+> [ver instrucciones](#paso-7-opcional--descargar-el-modelo-de-ia-para-activar-a-lumi)).
+> Sin este paso, Lumi responde con mensajes predefinidos.
+
+---
 
 ### Paso 7 (opcional) — Descargar el modelo de IA para activar a Lumi
 
@@ -417,10 +431,17 @@ por el modelo, debes descargarlo.
 > debemos conectarlo temporalmente a internet, descargar, y volver a aislarlo.
 > Este procedimiento está automatizado por el Makefile.
 
-Ejecuta:
-
+**WSL / Mac / Linux:**
 ```bash
 make prod-pull-model
+```
+
+**PowerShell:**
+```powershell
+$NETWORK = docker network ls --format "{{.Name}}" | Select-String "public_network"
+docker network connect $NETWORK chat_ollama
+docker exec -i chat_ollama ollama pull llama3.2:3b
+docker network disconnect $NETWORK chat_ollama
 ```
 
 > ⏱️ **Tiempo estimado:** 3-10 minutos (el modelo pesa ~2 GB).
@@ -593,20 +614,15 @@ es mediante Swagger UI en http://localhost/api/docs.**
 | GET | `/usuarios/me` | JWT | Datos del usuario autenticado |
 | GET | `/usuarios/{id}/presencia` | No | Estado de conexión de un usuario |
 | POST | `/usuarios/presencia/bulk` | No | Estado de conexión de varios usuarios |
-| POST | `/mensaje_privado` | No | Enviar mensaje privado |
-| GET | `/conversacion/{id}` | No | Historial de mensajes recibidos |
-| GET | `/conversacion/{id}/{contacto_id}` | No | Conversación bilateral completa |
-| GET | `/no_leidos/{id}` | No | Mensajes no leídos por contacto |
-| DELETE | `/no_leidos/{id}/{contacto}` | No | Marcar conversación como leída |
-| POST | `/ia/mensaje` | No | Enviar mensaje a Lumi |
+| POST | `/mensaje_privado` | JWT | Enviar mensaje privado (con soporte para autodestrucción vía `expira_en`) |
+| GET | `/conversacion/{id}` | JWT | Historial de mensajes recibidos (legado, paginado) |
+| GET | `/conversacion/{id}/{contacto_id}` | JWT | Conversación bilateral completa (paginada por cursor) |
+| GET | `/no_leidos/{id}` | JWT | Mensajes no leídos por contacto |
+| DELETE | `/no_leidos/{id}/{contacto}` | JWT | Marcar conversación como leída |
+| POST | `/ia/mensaje` | JWT | Enviar mensaje a Lumi |
 | GET | `/ia/estado` | No | Verificar disponibilidad de Lumi |
 | POST | `/interno/notificar` | Worker secret | Endpoint interno (usado por el worker) |
-| WS | `/ws/{usuario_id}?token=<jwt>` | JWT | Conexión WebSocket en tiempo real |
-
-> 💡 **El frontend envía el token JWT en estos endpoints y la conexión WebSocket
-> sí valida el token. La verificación estricta en el cuerpo de `/mensaje_privado`
-> y `/ia/mensaje` está contemplada como refuerzo de seguridad para una
-> siguiente iteración.**
+| WS | `/ws/{usuario_id}` | JWT (1er mensaje) | Conexión WebSocket en tiempo real |
 
 ### Ejemplos prácticos con cURL
 
