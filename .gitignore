@@ -21,3 +21,5 @@ evidencias/
 frontend/node_modules/
 frontend/dist/
 frontend/.env
+# Índice local de skills
+.atl/
