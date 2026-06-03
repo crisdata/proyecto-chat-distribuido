@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 import importlib
 
 import pytest
@@ -27,11 +28,12 @@ async def test_crear_y_validar_token_activo(auth_module, monkeypatch):
     monkeypatch.setattr(auth_module, "guardar_sesion", fake_guardar_sesion)
     monkeypatch.setattr(auth_module, "obtener_sesion", fake_obtener_sesion)
 
-    token = await auth_module.crear_token("u1", "Cris")
+    token = await auth_module.crear_token("u1")
     payload = await auth_module.validar_token(token)
 
     assert payload["sub"] == "u1"
-    assert payload["nombre"] == "Cris"
+    assert "nombre" not in payload
+    assert "email" not in payload
 
 
 @pytest.mark.asyncio

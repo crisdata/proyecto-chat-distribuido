@@ -29,26 +29,31 @@ if not WORKER_SECRET:
         "Genera uno con: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
     )
 
+JWT_SECRET_ACTIVO: str = JWT_SECRET
+WORKER_SECRET_ACTIVO: str = WORKER_SECRET
+
 JWT_ALGORITMO = "HS256"
 JWT_TTL_SEGUNDOS = 3600  # 1 hora
 
 
-async def crear_token(usuario_id: str, nombre: str) -> str:
+async def crear_token(usuario_id: str) -> str:
     """
     Crea un JWT firmado para el usuario y lo registra en Redis.
     Doble validación: la firma garantiza autenticidad, y Redis
     permite invalidar la sesión antes del TTL natural del token.
+
+    El token solo transporta el identificador opaco del usuario. No incluye
+    email ni nombre visible para preservar privacidad en clientes/logs.
     """
     ahora = datetime.now(timezone.utc)
     payload = {
         "sub": usuario_id,
-        "nombre": nombre,
         "iat": ahora,
         "exp": ahora + timedelta(seconds=JWT_TTL_SEGUNDOS)
     }
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITMO)
+    token = jwt.encode(payload, JWT_SECRET_ACTIVO, algorithm=JWT_ALGORITMO)
     await guardar_sesion(usuario_id, token, ttl=JWT_TTL_SEGUNDOS)
-    log.info(f"Token emitido para usuario {nombre} (id={usuario_id})")
+    log.info(f"Token emitido para usuario id={usuario_id}")
     return token
 
 
@@ -61,7 +66,7 @@ async def validar_token(token: str) -> dict:
     try:
         payload = jwt.decode(
             token,
-            JWT_SECRET,
+            JWT_SECRET_ACTIVO,
             algorithms=[JWT_ALGORITMO]
         )
     except jwt.ExpiredSignatureError:
@@ -111,7 +116,7 @@ def autenticar_worker(
     Dependencia de FastAPI para validar que un request viene del worker
     mediante un secreto compartido en el header X-Worker-Secret.
     """
-    if x_worker_secret != WORKER_SECRET:
+    if x_worker_secret != WORKER_SECRET_ACTIVO:
         log.warning("Intento de acceso al endpoint interno sin secreto válido")
         raise HTTPException(
             status_code=403,

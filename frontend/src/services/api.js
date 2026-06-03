@@ -30,6 +30,24 @@ function authHeaders() {
 
 // ── Usuarios ──────────────────────────────────────────────────────────────
 
+export async function loginUsuario(email, nombre = null) {
+	const body = { email };
+	if (nombre !== null) body.nombre = nombre;
+
+	const res = await fetch(`${BASE_URL}/usuarios/login`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const error = await res.json();
+		throw new Error(error.detail || "Error al iniciar sesión");
+	}
+	const data = await res.json();
+	if (data.token) setToken(data.token);
+	return data;
+}
+
 export async function registrarUsuario(nombre) {
 	const res = await fetch(`${BASE_URL}/usuarios`, {
 		method: "POST",

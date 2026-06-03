@@ -8,7 +8,7 @@
 import uuid
 from fastapi import APIRouter, HTTPException, Depends
 from app.models import (
-    UsuarioCreate, UsuarioResponse, UsuarioAutenticadoResponse,
+    UsuarioCreate, UsuarioLoginRequest, UsuarioResponse, UsuarioAutenticadoResponse,
     PresenciaResponse, PresenciaBulkRequest
 )
 from app.database import get_connection, release_connection
@@ -21,6 +21,79 @@ from app.cache import (
 from app.auth import crear_token, autenticar_usuario_actual
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
+
+
+@router.post("/login", status_code=200)
+async def login_usuario(datos: UsuarioLoginRequest):
+    """
+    Login demo por email normalizado.
+
+    Si el correo existe, inicia sesión. Si no existe y no se envía nombre,
+    pide completar el registro. Si no existe y se envía nombre, crea la cuenta.
+    El email nunca se devuelve al cliente.
+    """
+    token_lock = await adquirir_lock(f"login:{datos.email}")
+    if not token_lock:
+        raise HTTPException(
+            status_code=429,
+            detail="El sistema está procesando otra solicitud con ese correo. Intenta de nuevo."
+        )
+
+    conn = await get_connection()
+    try:
+        async with conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT id, nombre, creado_en FROM usuarios WHERE email = %s",
+                (datos.email,)
+            )
+            existente = await cursor.fetchone()
+
+            if existente:
+                usuario_id, nombre, creado_en = existente[0], existente[1], existente[2]
+                jwt_token = await crear_token(usuario_id)
+                return {
+                    "id": usuario_id,
+                    "nombre": nombre,
+                    "creado_en": creado_en.isoformat() if creado_en else None,
+                    "token": jwt_token,
+                    "requiere_nombre": False,
+                }
+
+            if datos.nombre is None:
+                return {
+                    "requiere_nombre": True,
+                    "mensaje": "Indica tu nombre visible para completar el registro.",
+                }
+
+            nuevo_id = str(uuid.uuid4())
+            await cursor.execute(
+                "INSERT INTO usuarios (id, nombre, email) VALUES (%s, %s, %s)",
+                (nuevo_id, datos.nombre, datos.email)
+            )
+
+            await cursor.execute(
+                "SELECT id, nombre, creado_en FROM usuarios WHERE id = %s",
+                (nuevo_id,)
+            )
+            usuario = await cursor.fetchone()
+
+        await cachear_usuario(nuevo_id, datos.nombre)
+        redis = get_redis()
+        await redis.setex(f"nombre:{datos.nombre.lower()}", 300, nuevo_id)
+
+        jwt_token = await crear_token(nuevo_id)
+
+        return {
+            "id": usuario[0],
+            "nombre": usuario[1],
+            "creado_en": usuario[2].isoformat() if usuario[2] else None,
+            "token": jwt_token,
+            "requiere_nombre": False,
+        }
+
+    finally:
+        await liberar_lock(f"login:{datos.email}", token_lock)
+        await release_connection(conn)
 
 
 @router.post("", response_model=UsuarioAutenticadoResponse, status_code=201)
@@ -49,7 +122,7 @@ async def registrar_usuario(datos: UsuarioCreate):
 
             if existente:
                 usuario_id, nombre, creado_en = existente[0], existente[1], existente[2]
-                jwt_token = await crear_token(usuario_id, nombre)
+                jwt_token = await crear_token(usuario_id)
                 return {
                     "id": usuario_id,
                     "nombre": nombre,
@@ -75,7 +148,7 @@ async def registrar_usuario(datos: UsuarioCreate):
             f"nombre:{datos.nombre.lower()}", 300, nuevo_id
         )
 
-        jwt_token = await crear_token(nuevo_id, datos.nombre)
+        jwt_token = await crear_token(nuevo_id)
 
         return {
             "id": usuario[0],

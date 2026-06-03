@@ -4,8 +4,9 @@
 
 import asyncio
 import logging
-import aiomysql
+import aiomysql  # type: ignore[import-untyped]
 import os
+from typing import Any
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,7 +24,7 @@ DB_CONFIG = {
 }
 
 # Pool de conexiones compartido por toda la aplicación
-pool = None
+pool: Any = None
 
 
 async def conectar():
@@ -110,10 +111,36 @@ async def crear_tablas():
             await cursor.execute("""
                 CREATE TABLE IF NOT EXISTS usuarios (
                     id VARCHAR(36) PRIMARY KEY,
-                    nombre VARCHAR(100) NOT NULL UNIQUE,
-                    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    email VARCHAR(255) NULL UNIQUE,
+                    nombre VARCHAR(100) NOT NULL,
+                    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_usuarios_nombre (nombre)
                 )
             """)
+
+            # Migración: agregar email para login demo si la tabla ya existía.
+            try:
+                await cursor.execute("""
+                    ALTER TABLE usuarios ADD COLUMN email VARCHAR(255) NULL
+                """)
+            except Exception:
+                pass  # Ya existe, ignorar
+
+            # Migración: índice único sobre email normalizado.
+            try:
+                await cursor.execute("""
+                    ALTER TABLE usuarios ADD UNIQUE INDEX uq_usuarios_email (email)
+                """)
+            except Exception:
+                pass  # Ya existe o hay motor que reporta duplicado, ignorar
+
+            # Migración: nombre deja de ser identidad única; email/id son identidad.
+            try:
+                await cursor.execute("""
+                    ALTER TABLE usuarios DROP INDEX nombre
+                """)
+            except Exception:
+                pass  # El índice no existe o ya fue removido
 
             # Tabla de mensajes privados entre usuarios.
             # Los índices aceleran las consultas más frecuentes del sistema:
