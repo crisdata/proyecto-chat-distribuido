@@ -192,6 +192,10 @@ export default function App() {
 		}
 	}
 
+	function handleSeleccionarGrupo(grupo) {
+		setContactoActivo({ ...grupo, tipo: "grupo" });
+	}
+
 	function handleLogout() {
 		setToken(null);
 		setUsuario(null);
