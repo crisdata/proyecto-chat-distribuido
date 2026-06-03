@@ -20,6 +20,11 @@ __pycache__/
 .env.local
 .env.*.local
 
+# Tests y dependencias de desarrollo (no necesarios en runtime)
+tests/
+pytest.ini
+requirements-dev.txt
+
 # Documentación y archivos auxiliares (no necesarios en runtime)
 *.md
 docs/
