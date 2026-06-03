@@ -2,7 +2,16 @@
 // Modal con pestañas: Personas, Grupos, Crear grupo.
 
 import { useState, useEffect, useMemo } from "react";
-import { Search, X, User, Bot, Users, PlusCircle, Eye, EyeOff } from "lucide-react";
+import {
+	Search,
+	X,
+	User,
+	Bot,
+	Users,
+	PlusCircle,
+	Eye,
+	EyeOff,
+} from "lucide-react";
 import {
 	listarUsuarios,
 	buscarGrupos,
@@ -208,7 +217,8 @@ export default function ModalNuevoChat({
 						{tab === "personas" && renderSelectorModo()}
 						{tab === "grupos" && (
 							<p className="text-[11px] text-vibe-500 leading-relaxed">
-								Los grupos son públicos y abiertos: cualquiera que los encuentre puede unirse.
+								Los grupos son públicos y abiertos: cualquiera que los encuentre
+								puede unirse.
 							</p>
 						)}
 					</div>
@@ -254,7 +264,8 @@ export default function ModalNuevoChat({
 					</button>
 				</div>
 				<p className="text-[11px] text-vibe-500 leading-relaxed">
-					Sin memoria: no se guarda historial en Vibe. Con memoria: el chat queda disponible para volver a consultarlo.
+					Sin memoria: no se guarda historial en Vibe. Con memoria: el chat
+					queda disponible para volver a consultarlo.
 				</p>
 			</div>
 		);
@@ -349,7 +360,8 @@ export default function ModalNuevoChat({
 		return (
 			<div className="flex flex-col gap-3 px-3 py-2">
 				<p className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-[11px] text-cyan-100 leading-relaxed">
-					Grupo público: cualquier usuario que lo encuentre puede unirse. Los mensajes quedan guardados en el grupo.
+					Grupo público: cualquier usuario que lo encuentre puede unirse. Los
+					mensajes quedan guardados en el grupo.
 				</p>
 				<label className="flex flex-col gap-2">
 					<span className="text-xs font-medium text-vibe-400">
