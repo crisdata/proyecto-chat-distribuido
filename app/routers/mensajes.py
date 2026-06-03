@@ -135,11 +135,16 @@ async def enviar_mensaje(
 )
 async def consultar_conversacion(
     usuario_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    before_id: int | None = Query(None, ge=1),
     payload: dict = Depends(autenticar_usuario_actual)
 ):
     """
-    Endpoint legado: retorna solo los mensajes recibidos por un usuario,
-    ordenados cronológicamente.
+    Endpoint legado: retorna una página de mensajes recibidos por un usuario.
+
+    Usa paginación por cursor:
+    - limit: cantidad de mensajes a retornar (1-100, default 50)
+    - before_id: si se envía, trae mensajes con id menor a ese valor
 
     Se mantiene por compatibilidad, pero el frontend debe usar
     /conversacion/{usuario_id}/{contacto_id}, que retorna la conversación
@@ -158,14 +163,23 @@ async def consultar_conversacion(
             )
 
         async with conn.cursor() as cursor:
+            where_cursor = ""
+            params: list[object] = [usuario_id]
+            if before_id is not None:
+                where_cursor = " AND id < %s"
+                params.append(before_id)
+            params.append(limit)
+
             await cursor.execute(
-                """SELECT id, emisor_id, receptor_id, contenido, timestamp
+                f"""SELECT id, emisor_id, receptor_id, contenido, timestamp
                    FROM mensajes
                    WHERE receptor_id = %s
-                   ORDER BY timestamp ASC""",
-                (usuario_id,)
+                      {where_cursor}
+                   ORDER BY id DESC
+                   LIMIT %s""",
+                tuple(params)
             )
-            mensajes = await cursor.fetchall()
+            mensajes = list(reversed(await cursor.fetchall()))
 
         return [
             {

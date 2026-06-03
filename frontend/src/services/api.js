@@ -101,14 +101,6 @@ export async function enviarMensaje(emisor_id, receptor_id, contenido) {
 	return res.json();
 }
 
-export async function obtenerConversacion(usuario_id) {
-	const res = await fetch(`${BASE_URL}/conversacion/${usuario_id}`, {
-		headers: authHeaders(),
-	});
-	if (!res.ok) throw new Error("Error al obtener conversación");
-	return res.json();
-}
-
 export async function obtenerConversacionBilateral(
 	usuarioId,
 	contactoId,
