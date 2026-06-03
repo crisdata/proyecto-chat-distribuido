@@ -26,6 +26,7 @@ frontend/.env
 
 # Contexto para agentes IA (no es parte del proyecto)
 context.md
+openspec/
 
 # Artefactos del entorno de desarrollo
 .pi/
