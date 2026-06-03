@@ -44,6 +44,7 @@ export default function Chat({
 	const [modoAutodestructivo, setModoAutodestructivo] = useState(false);
 	const [modo, setModo] = useState("con_memoria");
 	const esSinMemoria = modo === "sin_memoria";
+	const [mensajesLocales, setMensajesLocales] = useState([]);
 	const finalRef = useRef(null);
 	const esIA = contacto.id === iaId;
 	const esGrupo = contacto.tipo === "grupo";
@@ -58,17 +59,24 @@ export default function Chat({
 			let data;
 			if (esGrupo) {
 				data = await mensajesGrupo(contacto.id);
-			} else {
+			} else if (!esSinMemoria) {
 				data = await obtenerConversacionBilateral(
 					usuarioActual.id,
 					contacto.id,
 				);
+			} else {
+				data = [];
 			}
 			setMensajes(data);
 		} catch (error) {
 			console.error("Error al cargar mensajes:", error);
 		}
-	}, [usuarioActual.id, contacto.id]);
+	}, [usuarioActual.id, contacto.id, esGrupo, esSinMemoria]);
+
+	useEffect(() => {
+		setMensajesLocales([]);
+		setModo("con_memoria");
+	}, [contacto.id]);
 
 	useEffect(() => {
 		setCargando(true);
@@ -83,11 +91,12 @@ export default function Chat({
 
 	useEffect(() => {
 		finalRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, [mensajes]);
+	}, [mensajes, mensajesLocales]);
 
 	// Recibir mensaje sin memoria desde WebSocket
 	useEffect(() => {
 		if (!mensajeSinMemoriaEntrante || !esSinMemoria) return;
+		if (mensajeSinMemoriaEntrante.emisor_id !== contacto.id) return;
 
 		setMensajesLocales((prev) => [
 			...prev,
@@ -100,7 +109,13 @@ export default function Chat({
 			},
 		]);
 		onConsumirSinMemoria?.();
-	}, [mensajeSinMemoriaEntrante]);
+	}, [
+		mensajeSinMemoriaEntrante,
+		esSinMemoria,
+		contacto.id,
+		usuarioActual.id,
+		onConsumirSinMemoria,
+	]);
 
 	async function handleEnviar() {
 		const contenido = texto.trim();
@@ -113,9 +128,32 @@ export default function Chat({
 			if (esGrupo) {
 				await enviarMensajeGrupo(contacto.id, contenido);
 			} else if (esIA) {
-				await enviarMensajeIA(usuarioActual.id, iaId, contenido, modo);
+				const respuesta = await enviarMensajeIA(usuarioActual.id, iaId, contenido, modo);
+				if (esSinMemoria) {
+					setMensajesLocales((prev) => [
+						...prev,
+						{
+							local_id: `local-user-${Date.now()}`,
+							emisor_id: usuarioActual.id,
+							receptor_id: iaId,
+							contenido,
+							timestamp: new Date().toISOString(),
+						},
+						{ ...respuesta, local_id: `local-ia-${Date.now()}` },
+					]);
+				}
 			} else if (esSinMemoria && !esIA) {
 				await enviarMensajeSinMemoria(usuarioActual.id, contacto.id, contenido);
+				setMensajesLocales((prev) => [
+					...prev,
+					{
+						local_id: `local-user-${Date.now()}`,
+						emisor_id: usuarioActual.id,
+						receptor_id: contacto.id,
+						contenido,
+						timestamp: new Date().toISOString(),
+					},
+				]);
 			} else {
 				const expiraEn = modoAutodestructivo ? 30 : null;
 				await enviarMensaje(usuarioActual.id, contacto.id, contenido, expiraEn);
@@ -138,13 +176,14 @@ export default function Chat({
 
 	function renderMensajes() {
 		let fechaAnterior = null;
-		return mensajes.map((mensaje, index) => {
+		const todosMensajes = [...mensajes, ...mensajesLocales];
+		return todosMensajes.map((mensaje, index) => {
 			const fechaActual = new Date(mensaje.timestamp).toDateString();
 			const mostrarFecha = fechaActual !== fechaAnterior;
 			fechaAnterior = fechaActual;
 
 			return (
-				<div key={mensaje.id || index}>
+				<div key={mensaje.id || mensaje.local_id || index}>
 					{mostrarFecha && (
 						<div className="flex items-center justify-center my-4">
 							<span
@@ -160,7 +199,7 @@ export default function Chat({
 						usuarioActual={usuarioActual}
 						iaId={iaId}
 						nombreEmisor={
-							mensaje.emisor_id === contacto.id ? contacto.nombre : null
+							esGrupo ? (mensaje.emisor_nombre || null) : (mensaje.emisor_id === contacto.id ? contacto.nombre : null)
 						}
 					/>
 				</div>
@@ -246,9 +285,10 @@ export default function Chat({
 				{!esGrupo && (
 					<button
 						title={esSinMemoria ? "Modo sin memoria" : "Modo con memoria"}
-						onClick={() =>
-							setModo(esSinMemoria ? "con_memoria" : "sin_memoria")
-						}
+						onClick={() => {
+							setMensajesLocales([]);
+							setModo(esSinMemoria ? "con_memoria" : "sin_memoria");
+						}}
 						className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
 							esSinMemoria
 								? "bg-amber-500/15 text-amber-400"
@@ -271,7 +311,7 @@ export default function Chat({
 						<Loader size={18} className="animate-spin" />
 						<span>Cargando conversación...</span>
 					</div>
-				) : mensajes.length === 0 ? (
+				) : mensajes.length === 0 && mensajesLocales.length === 0 ? (
 					<div
 						className="flex flex-col items-center justify-center
                           h-full gap-3 text-vibe-500"

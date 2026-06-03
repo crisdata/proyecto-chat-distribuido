@@ -193,7 +193,7 @@ export async function enviarMensajeIA(
 			"Content-Type": "application/json",
 			...authHeaders(),
 		},
-		body: JSON.stringify({ emisor_id, receptor_id: ia_id, contenido }),
+		body: JSON.stringify({ emisor_id, receptor_id: ia_id, contenido, modo }),
 	});
 	if (!res.ok) {
 		const error = await res.json();
@@ -275,7 +275,11 @@ export async function enviarMensajeGrupo(grupoId, contenido) {
 	return res.json();
 }
 
-export async function enviarMensajeSinMemoria(emisor_id, receptor_id, contenido) {
+export async function enviarMensajeSinMemoria(
+	emisor_id,
+	receptor_id,
+	contenido,
+) {
 	const res = await fetch(`${BASE_URL}/mensaje_privado/sin_memoria`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json", ...authHeaders() },

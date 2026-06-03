@@ -167,6 +167,7 @@ export default function ListaContactos({
 				{grupos.map((grupo) => {
 					const activo =
 						contactoActivo?.tipo === "grupo" && contactoActivo?.id === grupo.id;
+					const cantidadNoLeidosGrupo = noLeidos.porGrupo?.[grupo.id] || 0;
 					return (
 						<button
 							key={grupo.id}
@@ -186,12 +187,29 @@ export default function ListaContactos({
 								<Users size={20} className="text-cyan-400" />
 							</div>
 							<div className="flex-1 min-w-0">
-								<span
-									className={`text-sm font-medium truncate
-									${activo ? "text-cyan-400" : "text-vibe-200"}`}
-								>
-									{grupo.nombre}
-								</span>
+								<div className="flex items-center justify-between gap-2">
+									<span
+										className={`text-sm font-medium truncate
+										${
+											activo
+												? "text-cyan-400"
+												: cantidadNoLeidosGrupo > 0
+													? "text-vibe-100 font-semibold"
+													: "text-vibe-200"
+										}`}
+									>
+										{grupo.nombre}
+									</span>
+									{cantidadNoLeidosGrupo > 0 && (
+										<span
+											className="flex-shrink-0 min-w-[20px] h-5 px-1.5
+											rounded-full bg-cyan-500 text-vibe-950 text-xs font-bold
+											flex items-center justify-center shadow-glow-cyan"
+										>
+											{cantidadNoLeidosGrupo > 9 ? "9+" : cantidadNoLeidosGrupo}
+										</span>
+									)}
+								</div>
 								<p className="text-xs text-vibe-500">Grupo público</p>
 							</div>
 						</button>

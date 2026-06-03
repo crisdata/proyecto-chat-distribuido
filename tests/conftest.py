@@ -86,7 +86,25 @@ class FakeCursor:
             self._result = [[g["id"], g["nombre"], g["creado_por"], None]] if g else []
 
     def _message_select(self, sql, params):
-        if "WHERE ID = %S" in sql:
+        if "JOIN USUARIOS" in sql and "WHERE MG.ID = %S" in sql:
+            # SELECT by message id with JOIN: [id, grupo_id, emisor_id, nombre, contenido, timestamp]
+            msg_id = params[0]
+            idx = msg_id - 1
+            if 0 <= idx < len(self._db.mensajes_grupo):
+                m = self._db.mensajes_grupo[idx]
+                self._result = [[idx + 1, m["grupo_id"], m["emisor_id"],
+                                 "Usuario", m["contenido"], "2026-06-03T00:00:00"]]
+            else:
+                self._result = []
+        elif "JOIN USUARIOS" in sql and "WHERE MG.GRUPO_ID" in sql:
+            gid = params[0] if params else None
+            msgs = [m for m in self._db.mensajes_grupo if m["grupo_id"] == gid]
+            self._result = [
+                [i + 1, m["grupo_id"], m["emisor_id"], "Usuario",
+                 m["contenido"], "2026-06-03T00:00:00"]
+                for i, m in enumerate(msgs)
+            ]
+        elif "WHERE ID = %S" in sql:
             idx = params[0] - 1
             if 0 <= idx < len(self._db.mensajes_grupo):
                 m = self._db.mensajes_grupo[idx]
@@ -95,7 +113,6 @@ class FakeCursor:
             else:
                 self._result = []
         elif "WHERE MG" in sql or "WHERE M.ID" in sql:
-            # Paginated group messages — same as by group_id for tests
             gid = params[0] if params else None
             msgs = [m for m in self._db.mensajes_grupo if m["grupo_id"] == gid]
             self._result = [

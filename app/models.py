@@ -163,6 +163,7 @@ class MensajeGrupoResponse(BaseModel):
     id: Optional[int] = None
     grupo_id: Optional[str] = None
     emisor_id: str
+    emisor_nombre: Optional[str] = None
     contenido: str
     timestamp: Optional[datetime] = None
 

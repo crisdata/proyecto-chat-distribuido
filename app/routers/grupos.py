@@ -206,8 +206,9 @@ async def mensajes_grupo(
             params.append(limit)
 
             await cursor.execute(
-                f"SELECT mg.id, mg.grupo_id, mg.emisor_id, mg.contenido, mg.timestamp "
+                f"SELECT mg.id, mg.grupo_id, mg.emisor_id, u.nombre, mg.contenido, mg.timestamp "
                 f"FROM mensajes_grupo mg "
+                f"JOIN usuarios u ON mg.emisor_id = u.id "
                 f"WHERE mg.grupo_id = %s{where} "
                 f"ORDER BY mg.id DESC LIMIT %s",
                 tuple(params),
@@ -219,8 +220,9 @@ async def mensajes_grupo(
                 "id": f[0],
                 "grupo_id": f[1],
                 "emisor_id": f[2],
-                "contenido": f[3],
-                "timestamp": f[4],
+                "emisor_nombre": f[3],
+                "contenido": f[4],
+                "timestamp": f[5],
             }
             for f in filas
         ]
@@ -255,8 +257,10 @@ async def enviar_mensaje_grupo(
             msg_id = cursor.lastrowid
 
             await cursor.execute(
-                "SELECT id, grupo_id, emisor_id, contenido, timestamp "
-                "FROM mensajes_grupo WHERE id = %s",
+                "SELECT mg.id, mg.grupo_id, mg.emisor_id, u.nombre, mg.contenido, mg.timestamp "
+                "FROM mensajes_grupo mg "
+                "JOIN usuarios u ON mg.emisor_id = u.id "
+                "WHERE mg.id = %s",
                 (msg_id,),
             )
             msg = await cursor.fetchone()
@@ -281,6 +285,7 @@ async def enviar_mensaje_grupo(
                             "tipo": "nuevo_mensaje_grupo",
                             "grupo_id": grupo_id,
                             "emisor_id": payload["sub"],
+                            "emisor_nombre": msg[3],
                             "contenido": datos.contenido,
                         },
                     )
@@ -289,8 +294,9 @@ async def enviar_mensaje_grupo(
             "id": msg[0],
             "grupo_id": msg[1],
             "emisor_id": msg[2],
-            "contenido": msg[3],
-            "timestamp": msg[4],
+            "emisor_nombre": msg[3],
+            "contenido": msg[4],
+            "timestamp": msg[5],
         }
     finally:
         await release_connection(conn)
