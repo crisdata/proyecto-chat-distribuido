@@ -1,5 +1,4 @@
 services:
-
   # ── Frontend React + Nginx ────────────────────────────────────────────
   # Único punto de entrada desde el exterior.
   # Solo pertenece a public_network para evitar acceso directo a datos.
@@ -66,10 +65,15 @@ services:
     image: redis:7-alpine
     container_name: chat_redis
     restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     networks:
       - data_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Usa -a solo cuando REDIS_PASSWORD está definida para no enviar AUTH vacío
+      test:
+        ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a $REDIS_PASSWORD} ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -138,7 +142,7 @@ services:
     networks:
       - app_network
       - data_network
-  
+
   # ── Dozzle — Visualizador de logs ────────────────────────────────────
   # Permite ver los logs de todos los contenedores Docker en tiempo real
   # desde el navegador en http://localhost:9999. No requiere configuración
@@ -168,7 +172,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      REDIS_HOSTS: "local:redis:6379"
+      REDIS_HOSTS: "local:redis:6379:0:${REDIS_PASSWORD:-}"
     depends_on:
       redis:
         condition: service_healthy
@@ -189,7 +193,7 @@ services:
     ports:
       - "9000:9000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - portainer_data:/data
 
 # ── Volúmenes persistentes ────────────────────────────────────────────
@@ -201,7 +205,6 @@ volumes:
 
 # ── Redes segmentadas por capa ────────────────────────────────────────
 networks:
-
   # Capa pública — frontend y API expuestos al navegador
   public_network:
     driver: bridge
