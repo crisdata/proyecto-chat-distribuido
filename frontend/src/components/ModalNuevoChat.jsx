@@ -1,6 +1,6 @@
 // ModalNuevoChat.jsx
 // Modal para iniciar un nuevo chat con cualquier usuario registrado.
-// Muestra usuarios que NO están ya en la lista de contactos visibles.
+// Muestra todos los usuarios del sistema (excepto el usuario actual).
 
 import { useState, useEffect, useMemo } from "react";
 import { Search, X, User, Bot } from "lucide-react";
@@ -10,7 +10,6 @@ import { getAvatarStyle } from "../utils/avatarColors";
 export default function ModalNuevoChat({
 	usuarioActual,
 	iaId,
-	contactosExistentes,
 	onSeleccionar,
 	onCerrar,
 }) {
@@ -29,22 +28,15 @@ export default function ModalNuevoChat({
 		cargar();
 	}, []);
 
-	// IDs de los contactos que ya están en la lista
-	const idsExistentes = useMemo(
-		() => new Set(contactosExistentes.map((c) => c.id)),
-		[contactosExistentes],
-	);
-
-	// Usuarios que el usuario actual puede contactar (no él mismo, no contactos existentes)
+	// Usuarios que el usuario actual puede contactar (todos menos él mismo)
 	const usuariosDisponibles = useMemo(() => {
 		const termino = busqueda.toLowerCase().trim();
 		return todosUsuarios.filter((u) => {
 			if (u.id === usuarioActual.id) return false;
-			if (idsExistentes.has(u.id)) return false;
 			if (termino && !u.nombre.toLowerCase().includes(termino)) return false;
 			return true;
 		});
-	}, [todosUsuarios, usuarioActual.id, idsExistentes, busqueda]);
+	}, [todosUsuarios, usuarioActual.id, busqueda]);
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">

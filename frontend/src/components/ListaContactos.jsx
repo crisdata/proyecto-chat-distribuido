@@ -192,7 +192,6 @@ export default function ListaContactos({
 				<ModalNuevoChat
 					usuarioActual={usuarioActual}
 					iaId={iaId}
-					contactosExistentes={contactos}
 					onSeleccionar={onSeleccionar}
 					onCerrar={() => setMostrarModalNuevoChat(false)}
 				/>
