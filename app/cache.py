@@ -8,12 +8,16 @@
 #   - Caché de tokens JWT para autenticación
 #   - Lock mejorado con token único y liberación atómica via Lua
 
+import asyncio
+import logging
 import redis.asyncio as aioredis
 import os
 import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
+
+log = logging.getLogger("cache")
 
 # Cliente Redis compartido por toda la aplicación
 cliente_redis = None
@@ -33,13 +37,53 @@ end
 
 
 async def conectar_redis():
-    """Crea la conexión a Redis al iniciar la aplicación."""
+    """
+    Crea la conexión a Redis al iniciar la aplicación.
+
+    Si REDIS_PASSWORD está definida y no está vacía, construye una URL
+    autenticada: redis://:password@host:port/0.
+    Incluye reintentos para tolerar arranques lentos del contenedor.
+    """
     global cliente_redis
-    cliente_redis = aioredis.from_url(
-        f"redis://{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}",
-        encoding="utf-8",
-        decode_responses=True,
-    )
+
+    host = os.getenv("REDIS_HOST", "redis")
+    port = os.getenv("REDIS_PORT", "6379")
+    password = os.getenv("REDIS_PASSWORD", "")
+
+    if password:
+        url = f"redis://:{password}@{host}:{port}/0"
+    else:
+        url = f"redis://{host}:{port}/0"
+
+    intentos_maximos = 10
+    espera_entre_intentos = 3  # segundos
+
+    for intento in range(1, intentos_maximos + 1):
+        try:
+            log.info(f"Intento {intento}/{intentos_maximos} de conexión a Redis...")
+            cliente_redis = aioredis.from_url(
+                url,
+                encoding="utf-8",
+                decode_responses=True,
+            )
+            # ping() confirma que la conexión es real, no solo que el objeto fue creado
+            await cliente_redis.ping()
+            log.info("Conexión a Redis establecida correctamente")
+            return
+        except Exception as e:
+            if intento == intentos_maximos:
+                log.error(
+                    f"Imposible conectar a Redis tras "
+                    f"{intentos_maximos} intentos. Último error: {e}"
+                )
+                raise RuntimeError(
+                    f"No se pudo conectar a Redis tras {intentos_maximos} intentos."
+                ) from e
+            log.warning(
+                f"Intento {intento} falló ({type(e).__name__}: {e}). "
+                f"Reintentando en {espera_entre_intentos}s..."
+            )
+            await asyncio.sleep(espera_entre_intentos)
 
 
 async def desconectar_redis():
