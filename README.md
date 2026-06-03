@@ -3,9 +3,9 @@
 > Un chat que corre **completo en tu computador**. Nada sale a internet.
 > Incluye a **Lumi**, una compañera virtual con inteligencia artificial local.
 
-**Autores:** Cristian Giraldo & Sebastián Pérez
-**Curso:** Programación Distribuida
-**Repositorio:** https://github.com/crisdata/proyecto-chat-distribuido
+**Autores:** Cristian Giraldo & Sebastián Pérez  
+**Curso:** Programación Distribuida  
+**Repositorio:** https://github.com/crisdata/proyecto-chat-distribuido  
 
 [![Build Status](https://github.com/crisdata/proyecto-chat-distribuido/actions/workflows/docker.yml/badge.svg)](https://github.com/crisdata/proyecto-chat-distribuido/actions)
 
