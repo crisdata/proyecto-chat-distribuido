@@ -223,22 +223,3 @@ export function crearWebSocket(usuarioId, onMensaje, onEstado) {
 		if (ws) ws.close();
 	};
 }
-
-// ── Utilidades ────────────────────────────────────────────────────────────
-
-export function formatearHora(timestamp) {
-	const ts = timestamp.endsWith("Z") ? timestamp : timestamp + "Z";
-	const fecha = new Date(ts);
-	return fecha.toLocaleTimeString("es-CO", {
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: true,
-	});
-}
-
-export function esHoy(timestamp) {
-	const ts = timestamp.endsWith("Z") ? timestamp : timestamp + "Z";
-	const hoy = new Date();
-	const fecha = new Date(ts);
-	return hoy.toDateString() === fecha.toDateString();
-}

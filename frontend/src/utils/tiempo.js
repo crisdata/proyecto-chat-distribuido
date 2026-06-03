@@ -12,27 +12,65 @@
  * Convierte un timestamp ISO en texto relativo en español.
  * Retorna string vacío si el timestamp es inválido o null.
  */
+/**
+ * Formatea una hora en formato HH:MM am/pm.
+ * Normaliza timestamps sin 'Z' para tratarlos como UTC.
+ */
+export function formatearHora(timestamp) {
+	const ts = timestamp.endsWith("Z") ? timestamp : timestamp + "Z";
+	const fecha = new Date(ts);
+	return fecha.toLocaleTimeString("es-CO", {
+		hour: "2-digit",
+		minute: "2-digit",
+		hour12: true,
+	});
+}
+
+/**
+ * Retorna true si el timestamp corresponde al día de hoy.
+ */
+export function esHoy(timestamp) {
+	const ts = timestamp.endsWith("Z") ? timestamp : timestamp + "Z";
+	const hoy = new Date();
+	const fecha = new Date(ts);
+	return hoy.toDateString() === fecha.toDateString();
+}
+
 export function formatearTiempoRelativo(timestampISO) {
-  if (!timestampISO) return ''
+	if (!timestampISO) return "";
 
-  const fecha = new Date(timestampISO)
-  if (isNaN(fecha.getTime())) return ''
+	const fecha = new Date(timestampISO);
+	if (isNaN(fecha.getTime())) return "";
 
-  const ahora = new Date()
-  const diffMs = ahora - fecha
-  const diffSeg = Math.floor(diffMs / 1000)
-  const diffMin = Math.floor(diffSeg / 60)
-  const diffHoras = Math.floor(diffMin / 60)
-  const diffDias = Math.floor(diffHoras / 24)
+	const ahora = new Date();
+	const diffMs = ahora - fecha;
+	const diffSeg = Math.floor(diffMs / 1000);
+	const diffMin = Math.floor(diffSeg / 60);
+	const diffHoras = Math.floor(diffMin / 60);
+	const diffDias = Math.floor(diffHoras / 24);
 
-  if (diffSeg < 10) return 'hace un momento'
-  if (diffSeg < 60) return 'hace unos segundos'
-  if (diffMin < 60) return `hace ${diffMin} min`
-  if (diffHoras < 24) return `hace ${diffHoras} ${diffHoras === 1 ? 'hora' : 'horas'}`
-  if (diffDias < 7) return `hace ${diffDias} ${diffDias === 1 ? 'día' : 'días'}`
+	if (diffSeg < 10) return "hace un momento";
+	if (diffSeg < 60) return "hace unos segundos";
+	if (diffMin < 60) return `hace ${diffMin} min`;
+	if (diffHoras < 24)
+		return `hace ${diffHoras} ${diffHoras === 1 ? "hora" : "horas"}`;
+	if (diffDias < 7)
+		return `hace ${diffDias} ${diffDias === 1 ? "día" : "días"}`;
 
-  // Más de 7 días: mostrar fecha corta
-  const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
-                 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-  return `el ${fecha.getDate()} ${meses[fecha.getMonth()]}`
+	// Más de 7 días: mostrar fecha corta
+	const meses = [
+		"ene",
+		"feb",
+		"mar",
+		"abr",
+		"may",
+		"jun",
+		"jul",
+		"ago",
+		"sep",
+		"oct",
+		"nov",
+		"dic",
+	];
+	return `el ${fecha.getDate()} ${meses[fecha.getMonth()]}`;
 }
