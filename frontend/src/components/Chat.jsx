@@ -149,6 +149,7 @@ export default function Chat({
 	// Texto descriptivo del estado del contacto en el header
 	function getTextoEstado() {
 		if (esGrupo) return "Grupo público";
+		if (esSinMemoria) return "Sin memoria · No se guarda historial";
 		if (esIA) {
 			if (estado === "online")
 				return `Modelo: ${import.meta.env.VITE_OLLAMA_MODEL || "llama3.2:3b"}`;
@@ -167,6 +168,7 @@ export default function Chat({
 	// Color del texto según el estado
 	function getColorEstado() {
 		if (esGrupo) return "text-cyan-400";
+		if (esSinMemoria) return "text-amber-400";
 		if (estado === "online") return esIA ? "text-lumi-400" : "text-online-400";
 		if (estado === "reposando") return "text-amber-400";
 		return "text-vibe-500";
