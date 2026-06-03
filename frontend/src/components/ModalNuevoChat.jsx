@@ -2,17 +2,14 @@
 // Modal con pestañas: Personas, Grupos, Crear grupo.
 
 import { useState, useEffect, useMemo } from "react";
-import { Search, X, User, Bot, Users, PlusCircle } from "lucide-react";
+import { Search, X, User, Bot, Users, PlusCircle, Eye, EyeOff } from "lucide-react";
 import {
 	listarUsuarios,
 	buscarGrupos,
 	crearGrupo,
 	unirseAGrupo,
-	gruposMios,
 } from "../services/api";
 import { getAvatarStyle } from "../utils/avatarColors";
-
-const TABS = ["personas", "grupos", "crear"];
 
 function TabButton({ tab, actual, onClick, icon: Icon, children }) {
 	const activo = tab === actual;
@@ -47,6 +44,7 @@ export default function ModalNuevoChat({
 	const [cargandoGrupos, setCargandoGrupos] = useState(false);
 	const [nombreGrupo, setNombreGrupo] = useState("");
 	const [creando, setCreando] = useState(false);
+	const [modoChat, setModoChat] = useState("con_memoria");
 	const [error, setError] = useState("");
 
 	// Cargar usuarios para pestaña Personas
@@ -188,7 +186,7 @@ export default function ModalNuevoChat({
 
 				{/* Búsqueda (personas / grupos) */}
 				{tab !== "crear" && (
-					<div className="px-5 pt-2 pb-2">
+					<div className="px-5 pt-2 pb-2 space-y-3">
 						<div
 							className="flex items-center gap-2 bg-vibe-800 rounded-xl
 							px-3 py-2.5 border border-vibe-700
@@ -207,6 +205,12 @@ export default function ModalNuevoChat({
 									placeholder-vibe-500 outline-none"
 							/>
 						</div>
+						{tab === "personas" && renderSelectorModo()}
+						{tab === "grupos" && (
+							<p className="text-[11px] text-vibe-500 leading-relaxed">
+								Los grupos son públicos y abiertos: cualquiera que los encuentre puede unirse.
+							</p>
+						)}
 					</div>
 				)}
 
@@ -219,6 +223,42 @@ export default function ModalNuevoChat({
 			</div>
 		</div>
 	);
+
+	function renderSelectorModo() {
+		return (
+			<div className="rounded-xl border border-vibe-700 bg-vibe-800/60 p-2 space-y-2">
+				<div className="grid grid-cols-2 gap-2">
+					<button
+						type="button"
+						onClick={() => setModoChat("con_memoria")}
+						className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition ${
+							modoChat === "con_memoria"
+								? "bg-cyan-500/20 text-cyan-300"
+								: "text-vibe-500 hover:text-vibe-300"
+						}`}
+					>
+						<Eye size={13} />
+						Con memoria
+					</button>
+					<button
+						type="button"
+						onClick={() => setModoChat("sin_memoria")}
+						className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition ${
+							modoChat === "sin_memoria"
+								? "bg-amber-500/20 text-amber-300"
+								: "text-vibe-500 hover:text-vibe-300"
+						}`}
+					>
+						<EyeOff size={13} />
+						Sin memoria
+					</button>
+				</div>
+				<p className="text-[11px] text-vibe-500 leading-relaxed">
+					Sin memoria: no se guarda historial en Vibe. Con memoria: el chat queda disponible para volver a consultarlo.
+				</p>
+			</div>
+		);
+	}
 
 	function renderPersonas() {
 		if (usuariosDisponibles.length === 0) {
@@ -239,7 +279,7 @@ export default function ModalNuevoChat({
 				<button
 					key={usuario.id}
 					onClick={() => {
-						onSeleccionar(usuario);
+						onSeleccionar({ ...usuario, modoInicial: modoChat });
 						onCerrar();
 					}}
 					className="w-full flex items-center gap-3 px-3 py-2.5
@@ -266,6 +306,20 @@ export default function ModalNuevoChat({
 	}
 
 	function renderGrupos() {
+		if (cargandoGrupos) {
+			return (
+				<p className="py-6 text-center text-sm text-vibe-500">
+					Buscando grupos...
+				</p>
+			);
+		}
+		if (busqueda.trim() && gruposBusqueda.length === 0) {
+			return (
+				<p className="py-6 text-center text-sm text-vibe-500">
+					No se encontraron grupos
+				</p>
+			);
+		}
 		return gruposBusqueda.map((grupo) => (
 			<button
 				key={grupo.id}
@@ -294,6 +348,9 @@ export default function ModalNuevoChat({
 	function renderCrear() {
 		return (
 			<div className="flex flex-col gap-3 px-3 py-2">
+				<p className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-[11px] text-cyan-100 leading-relaxed">
+					Grupo público: cualquier usuario que lo encuentre puede unirse. Los mensajes quedan guardados en el grupo.
+				</p>
 				<label className="flex flex-col gap-2">
 					<span className="text-xs font-medium text-vibe-400">
 						Nombre del grupo

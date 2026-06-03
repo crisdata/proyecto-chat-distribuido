@@ -75,8 +75,8 @@ export default function Chat({
 
 	useEffect(() => {
 		setMensajesLocales([]);
-		setModo("con_memoria");
-	}, [contacto.id]);
+		setModo(contacto.modoInicial || "con_memoria");
+	}, [contacto.id, contacto.modoInicial]);
 
 	useEffect(() => {
 		setCargando(true);
