@@ -23,3 +23,9 @@ frontend/dist/
 frontend/.env
 # Índice local de skills
 .atl/
+
+# Contexto para agentes IA (no es parte del proyecto)
+context.md
+
+# Artefactos del entorno de desarrollo
+.pi/
