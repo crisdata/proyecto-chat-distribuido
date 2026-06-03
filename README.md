@@ -123,15 +123,27 @@ Ambas opciones necesitan primero instalar Docker Desktop y Git.
 
 ### Paso 3 — Elegir tu terminal
 
-**Si vas con la Opción A (WSL):** Docker Desktop ya instala WSL. Busca
-**Ubuntu** en el menú de inicio y ábrelo. Si no aparece, abre **PowerShell como
-administrador**, ejecuta `wsl --install`, reinicia, y vuelve a buscar Ubuntu.
-Dentro de Ubuntu, instala Python, Make y Git:
+**Si vas con la Opción A (WSL):**
+
+1. Docker Desktop instala WSL automáticamente durante su instalación. Solo hay
+   que activar la integración con la distribución de Ubuntu:
+   - Abre Docker Desktop.
+   - Ve a **Settings** (el ícono de engranaje) -> **Resources** -> **WSL Integration**.
+   - Activa la opción **Enable integration with my default WSL distro** y, si
+     aparece **Ubuntu** en la lista, enciende también su interruptor.
+   - Pulsa **Apply & restart**.
+2. Busca **Ubuntu** en el menú de inicio y ábrelo. Esa terminal es donde
+   ejecutarás los comandos de la Opción A.
+3. Dentro de Ubuntu, instala Python, Make y Git:
 
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-pip make git
 ```
+
+> Si no ves **Ubuntu** en el menú de inicio ni en la lista de WSL Integration,
+> es que la distribución aún no está instalada. Ábrela desde Microsoft Store
+> buscando "Ubuntu", o usa la Opción B (PowerShell), que no necesita WSL.
 
 **Si vas con la Opción B (PowerShell):** abre PowerShell normal. No necesitas
 instalar nada más.
@@ -158,32 +170,40 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/crisdata/proyecto-chat
 
 ### Paso 5 — Generar las claves de seguridad
 
-El sistema necesita dos claves secretas (`JWT_SECRET` y `WORKER_SECRET`) para
-firmar las sesiones. Sin ellas la API no arranca.
+El archivo `.env` ya trae dos claves de ejemplo (`JWT_SECRET` y
+`WORKER_SECRET`) con un valor temporal que **debes reemplazar** por valores
+aleatorios. Si no lo haces, la API no arranca. Es importante **reemplazar**
+esas líneas, no añadir nuevas: si quedan duplicadas, el sistema podría leer la
+clave de ejemplo y fallar.
 
-**Opción A (Ubuntu/WSL):**
+**Opción A (Ubuntu/WSL):** estos comandos reemplazan directamente las líneas
+existentes en el `.env`.
 ```bash
-python3 -c "import secrets; print('JWT_SECRET=' + secrets.token_urlsafe(48))" >> .env
-python3 -c "import secrets; print('WORKER_SECRET=' + secrets.token_urlsafe(48))" >> .env
+sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')|" .env
+sed -i "s|^WORKER_SECRET=.*|WORKER_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')|" .env
 ```
 
-**Opción B (PowerShell):** este método genera claves seguras sin los
-caracteres `+`, `/` ni `=`, que romperían el archivo `.env`.
+**Opción B (PowerShell):** genera claves sin los caracteres `+`, `/` ni `=`
+(que romperían el `.env`) y reemplaza las líneas existentes sin duplicarlas.
 ```powershell
-$bytes = New-Object 'System.Byte[]' 36
-$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-$rng.GetBytes($bytes)
-$jwt = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
-Add-Content .env "JWT_SECRET=$jwt"
-$rng.GetBytes($bytes)
-$worker = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
-Add-Content .env "WORKER_SECRET=$worker"
+function New-Clave {
+  $bytes = New-Object 'System.Byte[]' 36
+  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+  [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+}
+$jwt = New-Clave
+$worker = New-Clave
+(Get-Content .env) `
+  -replace '^JWT_SECRET=.*', "JWT_SECRET=$jwt" `
+  -replace '^WORKER_SECRET=.*', "WORKER_SECRET=$worker" |
+  Set-Content .env
 ```
 
-Verifica que las dos líneas quedaron al final del archivo `.env`:
+Verifica que las dos claves quedaron con valores nuevos (y que no están
+duplicadas):
 
 ```powershell
-Get-Content .env -Tail 2
+Select-String -Path .env -Pattern "JWT_SECRET|WORKER_SECRET"
 ```
 
 ### Paso 6 — Levantar el sistema
@@ -247,14 +267,14 @@ Si esto funciona, el login, el WebSocket, la base de datos y las notificaciones 
 
 1. Haz clic en **Nuevo chat** y abre la pestaña **Crear**.
 2. Crea un grupo, por ejemplo **Programación**.
-3. Desde otra ventana/sesión, busca el grupo en **Nuevo chat → Grupos** y únete.
+3. Desde otra ventana/sesión, busca el grupo en **Nuevo chat -> Grupos** y únete.
 4. Envía un mensaje desde una sesión: si la otra está dentro del grupo, el mensaje llega en vivo.
 5. Si la otra sesión está en otro chat, aparece un badge de no leído en el grupo.
 6. Los mensajes del grupo muestran el nombre visible de quien escribió.
 
 ### Prueba 5 — Chat persona-persona sin memoria
 
-1. Haz clic en **Nuevo chat → Personas**.
+1. Haz clic en **Nuevo chat -> Personas**.
 2. Elegí **Sin memoria** antes de seleccionar a la persona.
 3. Envía un mensaje: debe mostrarse en vivo, pero no quedar guardado al volver a abrir el chat.
 4. Volvé a iniciar un chat en modo **Con memoria**: los mensajes sin memoria no deben aparecer.
@@ -525,14 +545,17 @@ docker compose -f docker-compose.prod.yml ps
 
 ### La API se reinicia en bucle con un error sobre JWT_SECRET o WORKER_SECRET
 
-Faltan las claves de seguridad en el `.env`. Revisa que estén:
+Las claves de seguridad del `.env` faltan, siguen con el valor de ejemplo o
+quedaron duplicadas. Revisa cómo están:
 
 ```powershell
-Get-Content .env -Tail 2
+Select-String -Path .env -Pattern "JWT_SECRET|WORKER_SECRET"
 ```
 
-Si no aparecen, vuelve al [Paso 5](#paso-5--generar-las-claves-de-seguridad)
-para generarlas y luego reinicia la API:
+Si ves el valor de ejemplo (`cambia_esta_clave...`), o la misma clave aparece
+dos veces, vuelve al [Paso 5](#paso-5--generar-las-claves-de-seguridad) para
+regenerarlas correctamente (ese paso las reemplaza sin duplicar). Luego
+reinicia la API:
 
 ```powershell
 docker compose -f docker-compose.prod.yml restart api
@@ -635,9 +658,10 @@ git clone https://github.com/crisdata/proyecto-chat-distribuido.git
 cd proyecto-chat-distribuido
 cp .env.example .env
 
-# Generar las dos claves de seguridad
-echo "JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
-echo "WORKER_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> .env
+# Reemplazar las dos claves de ejemplo por valores aleatorios
+# (reemplaza las líneas existentes, no las duplica)
+sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')|" .env
+sed -i "s|^WORKER_SECRET=.*|WORKER_SECRET=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')|" .env
 
 # Construir y levantar (la primera vez tarda de 5 a 10 minutos)
 make up

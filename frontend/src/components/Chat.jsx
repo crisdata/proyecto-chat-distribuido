@@ -389,38 +389,38 @@ export default function Chat({
 					</p>
 				)}
 				<div className="flex items-end gap-3">
-				<button
-					title={
-						modoAutodestructivo
-							? "Desactivar mensaje autodestructivo"
-							: "Mensaje autodestructivo (30s)"
-					}
-					onClick={() => setModoAutodestructivo((prev) => !prev)}
-					className={`w-10 h-10 rounded-xl flex items-center justify-center
+					<button
+						title={
+							modoAutodestructivo
+								? "Desactivar mensaje autodestructivo"
+								: "Mensaje autodestructivo (30s)"
+						}
+						onClick={() => setModoAutodestructivo((prev) => !prev)}
+						className={`w-10 h-10 rounded-xl flex items-center justify-center
                      transition ${
 												modoAutodestructivo
 													? "bg-red-500/20 text-red-400 shadow-glow-red"
 													: "bg-vibe-800 text-vibe-600 hover:bg-vibe-700 hover:text-cyan-400"
 }`}
-				>
-					<Flame size={18} />
-				</button>
+					>
+						<Flame size={18} />
+					</button>
 
-				<textarea
-					value={texto}
-					onChange={(e) => {
-						setTexto(e.target.value);
-						setAviso("");
-					}}
-					onKeyDown={handleKeyDown}
-					placeholder={
-						modoAutodestructivo
-							? "Mensaje autodestructivo (30s)..."
-							: "Escribe un mensaje..."
-					}
-					rows={1}
-					disabled={enviando}
-					className={`flex-1 px-4 py-2.5 rounded-2xl
+					<textarea
+						value={texto}
+						onChange={(e) => {
+							setTexto(e.target.value);
+							setAviso("");
+						}}
+						onKeyDown={handleKeyDown}
+						placeholder={
+							modoAutodestructivo
+								? "Mensaje autodestructivo (30s)..."
+								: "Escribe un mensaje..."
+						}
+						rows={1}
+						disabled={enviando}
+						className={`flex-1 px-4 py-2.5 rounded-2xl
                      border text-sm outline-none resize-none
                      transition
                      disabled:opacity-50 max-h-32 overflow-y-auto
@@ -429,23 +429,23 @@ export default function Chat({
 													? "bg-red-500/5 border-red-500/40 text-red-100 placeholder-red-400/50 focus:ring-2 focus:ring-red-500"
 													: "bg-vibe-800 border-vibe-700 text-vibe-100 placeholder-vibe-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
 }`}
-				/>
-				<button
-					onClick={handleEnviar}
-					disabled={!texto.trim() || enviando}
-					className="w-10 h-10 rounded-full bg-gradient-vibe
+					/>
+					<button
+						onClick={handleEnviar}
+						disabled={!texto.trim() || enviando}
+						className="w-10 h-10 rounded-full bg-gradient-vibe
                      text-white flex items-center justify-center
                      transition flex-shrink-0 shadow-glow-cyan
                      hover:opacity-90 active:scale-95
                      disabled:opacity-40 disabled:cursor-not-allowed
                      disabled:shadow-none"
-				>
-					{enviando ? (
-						<Loader size={18} className="animate-spin" />
-					) : (
-						<Send size={18} />
-					)}
-				</button>
+					>
+						{enviando ? (
+							<Loader size={18} className="animate-spin" />
+						) : (
+							<Send size={18} />
+						)}
+					</button>
 				</div>
 			</div>
 		</div>
