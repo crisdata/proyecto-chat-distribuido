@@ -92,7 +92,7 @@ services:
     restart: unless-stopped
     mem_limit: 256m
     mem_reservation: 128m
-    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     networks:
