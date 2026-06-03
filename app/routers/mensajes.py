@@ -12,7 +12,7 @@
 #   3. Publica evento en RabbitMQ para procesamiento asíncrono
 #   4. El worker consume el evento, actualiza Redis y notifica via WebSocket
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.models import (
     MensajeCreate, MensajeResponse,
     NoLeidosResponse
@@ -26,6 +26,7 @@ from app.cache import (
 )
 from app.queue import publicar
 from app.routers.websocket import manager
+from app.auth import autenticar_usuario_actual
 
 router = APIRouter(tags=["Mensajes"])
 
@@ -56,7 +57,10 @@ async def validar_usuario(usuario_id: str, conn) -> str | None:
 
 
 @router.post("/mensaje_privado", response_model=MensajeResponse, status_code=201)
-async def enviar_mensaje(datos: MensajeCreate):
+async def enviar_mensaje(
+    datos: MensajeCreate,
+    payload: dict = Depends(autenticar_usuario_actual)
+):
     """
     Envía un mensaje privado de un usuario a otro.
     Ambos usuarios deben estar registrados en el sistema.
@@ -64,6 +68,9 @@ async def enviar_mensaje(datos: MensajeCreate):
     La notificación al receptor se delega al worker via RabbitMQ,
     demostrando el patrón de comunicación desacoplada de la Clase 9.
     """
+    if datos.emisor_id != payload["sub"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     conn = await get_connection()
     try:
         # Validar emisor
@@ -126,12 +133,18 @@ async def enviar_mensaje(datos: MensajeCreate):
     "/conversacion/{usuario_id}",
     response_model=list[MensajeResponse]
 )
-async def consultar_conversacion(usuario_id: str):
+async def consultar_conversacion(
+    usuario_id: str,
+    payload: dict = Depends(autenticar_usuario_actual)
+):
     """
     Retorna el historial de mensajes recibidos por un usuario,
     ordenados cronológicamente.
     Resetea el contador de mensajes no leídos al consultar.
     """
+    if usuario_id != payload["sub"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     conn = await get_connection()
     try:
         nombre = await validar_usuario(usuario_id, conn)
@@ -172,7 +185,10 @@ async def consultar_conversacion(usuario_id: str):
     "/no_leidos/{usuario_id}",
     response_model=NoLeidosResponse
 )
-async def mensajes_no_leidos(usuario_id: str):
+async def mensajes_no_leidos(
+    usuario_id: str,
+    payload: dict = Depends(autenticar_usuario_actual)
+):
     """
     Retorna el total de mensajes no leídos del usuario, junto con
     el desglose por contacto. El frontend usa el total para el
@@ -188,6 +204,9 @@ async def mensajes_no_leidos(usuario_id: str):
         }
       }
     """
+    if usuario_id != payload["sub"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     conn = await get_connection()
     try:
         nombre = await validar_usuario(usuario_id, conn)
@@ -214,7 +233,11 @@ async def mensajes_no_leidos(usuario_id: str):
     "/no_leidos/{usuario_id}/{contacto_id}",
     status_code=204
 )
-async def marcar_como_leidos(usuario_id: str, contacto_id: str):
+async def marcar_como_leidos(
+    usuario_id: str,
+    contacto_id: str,
+    payload: dict = Depends(autenticar_usuario_actual)
+):
     """
     Borra el contador de mensajes no leídos que el usuario tenía
     con un contacto específico. Se llama cuando el usuario abre
@@ -222,6 +245,9 @@ async def marcar_como_leidos(usuario_id: str, contacto_id: str):
 
     Retorna 204 No Content si tuvo éxito (sin body).
     """
+    if usuario_id != payload["sub"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     await resetear_no_leidos_con(usuario_id, contacto_id)
     return None
 
@@ -230,11 +256,18 @@ async def marcar_como_leidos(usuario_id: str, contacto_id: str):
     "/conversacion/{usuario_id}/{contacto_id}",
     response_model=list[MensajeResponse]
 )
-async def consultar_conversacion_bilateral(usuario_id: str, contacto_id: str):
+async def consultar_conversacion_bilateral(
+    usuario_id: str,
+    contacto_id: str,
+    payload: dict = Depends(autenticar_usuario_actual)
+):
     """
     Retorna el historial completo de mensajes entre dos usuarios,
     en ambas direcciones, ordenados cronológicamente.
     """
+    if usuario_id != payload["sub"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     conn = await get_connection()
     try:
         nombre_usuario = await validar_usuario(usuario_id, conn)

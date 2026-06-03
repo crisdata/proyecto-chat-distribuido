@@ -17,7 +17,7 @@ import random
 import uuid
 import os
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from ollama import AsyncClient
 from dotenv import load_dotenv
 
@@ -29,6 +29,7 @@ from app.cache import (
     get_redis
 )
 from app.queue import publicar
+from app.auth import autenticar_usuario_actual
 
 load_dotenv()
 
@@ -264,13 +265,19 @@ async def generar_respuesta_ia(mensaje: str, historial: list) -> tuple[str, bool
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.post("/mensaje", response_model=MensajeResponse, status_code=201)
-async def mensaje_a_ia(datos: MensajeCreate):
+async def mensaje_a_ia(
+    datos: MensajeCreate,
+    payload: dict = Depends(autenticar_usuario_actual)
+):
     """
     Envía un mensaje a Lumi y retorna su respuesta.
     Si Ollama está disponible, devuelve respuesta generada por el modelo.
     Si Ollama está caído, devuelve un mensaje fallback empático en la voz
     de Lumi, manteniendo la continuidad de la conversación.
     """
+    if datos.emisor_id != payload["sub"]:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     conn = await get_connection()
     try:
         async with conn.cursor() as cursor:
