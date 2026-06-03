@@ -20,6 +20,10 @@ load_dotenv()
 
 log = logging.getLogger("queue")
 
+# Colas RabbitMQ usadas por el sistema
+COLA_MENSAJES = "mensajes"
+COLA_MENSAJES_FALLIDOS = "mensajes.fallidos"
+
 # Conexión y canal compartidos por toda la aplicación
 _conexion = None
 _canal = None
@@ -55,8 +59,12 @@ async def conectar_queue():
             )
             _conexion = await aio_pika.connect_robust(url)
             _canal = await _conexion.channel()
-            await _canal.declare_queue("mensajes", durable=True)
-            log.info("Cola 'mensajes' declarada en RabbitMQ")
+            await _canal.declare_queue(COLA_MENSAJES, durable=True)
+            await _canal.declare_queue(COLA_MENSAJES_FALLIDOS, durable=True)
+            log.info(
+                f"Colas '{COLA_MENSAJES}' y '{COLA_MENSAJES_FALLIDOS}' "
+                "declaradas en RabbitMQ"
+            )
             return
 
         except Exception as e:
@@ -102,7 +110,11 @@ async def publicar(cola: str, evento: dict):
     evento_con_traza = {**evento, "request_id": get_request_id()}
 
     try:
-        await _canal.default_exchange.publish(
+        if _canal is None:
+            raise RuntimeError("Canal RabbitMQ no inicializado")
+        canal = _canal
+
+        await canal.default_exchange.publish(
             aio_pika.Message(
                 body=json.dumps(evento_con_traza).encode(),
                 delivery_mode=aio_pika.DeliveryMode.PERSISTENT

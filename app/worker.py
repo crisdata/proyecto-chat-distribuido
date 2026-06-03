@@ -43,6 +43,9 @@ if not WORKER_SECRET:
         "El worker no puede autenticarse contra la API sin él."
     )
 
+COLA_MENSAJES = "mensajes"
+COLA_MENSAJES_FALLIDOS = "mensajes.fallidos"
+
 PREFETCH = 5
 MAX_REINTENTOS = 3
 TIMEOUT_HTTP_SEGUNDOS = 10
@@ -55,6 +58,38 @@ log = logging.getLogger("worker")
 
 
 # ── Procesamiento de mensajes ──────────────────────────────────────────────
+
+async def publicar_en_dlq(
+    canal,
+    evento: dict,
+    razon: str,
+    reintentos: int = 0,
+):
+    """
+    Publica eventos descartados en la cola de fallos para inspección.
+    El worker hace ack del mensaje original después de publicar aquí.
+    """
+    payload = {
+        **evento,
+        "error": {
+            "razon": razon,
+            "reintentos": reintentos,
+            "request_id": get_request_id(),
+        },
+    }
+    await canal.default_exchange.publish(
+        aio_pika.Message(
+            body=json.dumps(payload).encode(),
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+            headers={
+                "x-error-razon": razon,
+                "x-reintentos": reintentos,
+            },
+        ),
+        routing_key=COLA_MENSAJES_FALLIDOS,
+    )
+    log.error(f"Evento enviado a DLQ '{COLA_MENSAJES_FALLIDOS}': {razon}")
+
 
 async def llamar_api_notificar(
     session: aiohttp.ClientSession,
@@ -122,6 +157,11 @@ async def procesar_mensaje(
         evento = json.loads(message.body.decode())
     except json.JSONDecodeError:
         log.error(f"Evento con JSON inválido, descartado: {message.body!r}")
+        await publicar_en_dlq(
+            message.channel,
+            {"raw_body": message.body.decode(errors="replace")},
+            "json_invalido",
+        )
         await message.ack()
         return
 
@@ -132,19 +172,20 @@ async def procesar_mensaje(
     request_id = evento.get("request_id", "-")
     set_request_id(request_id)
 
+    headers = message.headers or {}
+    intento = int(headers.get("x-reintentos", 0))
+
     receptor_id = evento.get("receptor_id")
     emisor_id = evento.get("emisor_id")
     emisor_nombre = evento.get("emisor_nombre")
 
     if not all([receptor_id, emisor_id, emisor_nombre]):
         log.error(f"Evento malformado, descartado: {evento}")
+        await publicar_en_dlq(message.channel, evento, "evento_malformado", intento)
         await message.ack()
         return
 
     log.info(f"Evento recibido de {emisor_nombre} para {receptor_id}")
-
-    headers = message.headers or {}
-    intento = int(headers.get("x-reintentos", 0))
 
     exito, recuperable = await llamar_api_notificar(
         session, receptor_id, emisor_id, emisor_nombre
@@ -156,6 +197,7 @@ async def procesar_mensaje(
         return
 
     if not recuperable:
+        await publicar_en_dlq(message.channel, evento, "error_no_recuperable", intento)
         await message.ack()
         return
 
@@ -163,6 +205,12 @@ async def procesar_mensaje(
         log.error(
             f"Mensaje descartado tras {MAX_REINTENTOS} reintentos: "
             f"{emisor_nombre} → {receptor_id}"
+        )
+        await publicar_en_dlq(
+            message.channel,
+            evento,
+            "reintentos_agotados",
+            intento + 1,
         )
         await message.ack()
         return
@@ -194,7 +242,7 @@ async def republicar_con_reintento(
     await asyncio.sleep(2 * nuevo_intento)
     await canal.default_exchange.publish(
         nuevo_mensaje,
-        routing_key="mensajes",
+        routing_key=COLA_MENSAJES,
     )
 
 
@@ -210,11 +258,12 @@ async def main():
     conexion = await aio_pika.connect_robust(RABBITMQ_URL)
     canal = await conexion.channel()
     await canal.set_qos(prefetch_count=PREFETCH)
-    cola = await canal.declare_queue("mensajes", durable=True)
+    cola = await canal.declare_queue(COLA_MENSAJES, durable=True)
+    await canal.declare_queue(COLA_MENSAJES_FALLIDOS, durable=True)
 
     session = aiohttp.ClientSession()
 
-    log.info(f"Escuchando cola 'mensajes' (prefetch={PREFETCH})")
+    log.info(f"Escuchando cola '{COLA_MENSAJES}' (prefetch={PREFETCH})")
 
     try:
         async def callback(message: aio_pika.IncomingMessage):
