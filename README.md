@@ -1,6 +1,6 @@
 # Vibe — Chat universitario con privacidad real
 
-> Un chat que corre **completo en tu computadora**. Nada sale a internet.
+> Un chat que corre **completo en tu computador**. Nada sale a internet.
 > Incluye a **Lumi**, una compañera virtual con inteligencia artificial local.
 
 **Autores:** Cristian Giraldo & Sebastián Pérez
@@ -15,7 +15,7 @@
 
 ### 🟢 Para usar Vibe
 
-1. [Lo único que necesitás](#lo-único-que-necesitás)
+1. [Lo único que necesitas](#lo-único-que-necesitas)
 2. [Guía de instalación — 5 pasos](#guía-de-instalación-5-pasos)
 3. [Recorrido guiado en 5 minutos](#recorrido-guiado-en-5-minutos)
 4. [Activar a Lumi (opcional)](#activar-a-lumi-opcional)
@@ -39,16 +39,16 @@
 
 ---
 
-## 🟢 Lo único que necesitás
+## 🟢 Lo único que necesitas
 
 | Qué | ¿Obligatorio? | Para qué |
 |-----|:---:|---|
 | **Docker Desktop** | Sí | Ejecuta todo el sistema (base de datos, chat, IA...) |
 | **PowerShell** | Sí | Ya viene en Windows. Escribirás los comandos ahí |
-| Git | No | Solo si querés modificar código |
-| Python | No | Solo si usás WSL o vas a desarrollar |
+| Git | No | Solo si quieres modificar código |
+| Python | No | Solo si usas WSL o vas a desarrollar |
 
-### ¿Mi computadora lo corre?
+### ¿Mi computador lo corre?
 
 | Recurso | Sin la IA de Lumi | Con Lumi (recomendado) |
 |---|---|---|
@@ -57,31 +57,31 @@
 | Espacio libre | 2 GB | 10 GB |
 | Internet | Solo al instalar | Solo al instalar |
 
-> Si tenés poca RAM podés usar Vibe sin la IA. Lumi responde con mensajes
+> Si tienes poca RAM puedes usar Vibe sin la IA. Lumi responde con mensajes
 > amigables predefinidos y el chat entre personas funciona normal.
 
 ---
 
 ## 🟢 Guía de instalación — 5 pasos
 
-Cada paso tiene un bloque de comandos. **Copialos, pegalos en PowerShell,
-presioná Enter.** Uno por uno, en orden.
+Cada paso tiene un bloque de comandos. **Cópialos, pégalos en PowerShell,
+presiona Enter.** Uno por uno, en orden.
 
 ---
 
 ### Paso 1 — Instalar Docker Desktop
 
-1. Entrá a https://www.docker.com/products/docker-desktop
-2. Bajá el instalador y abrilo. Dejá las opciones que vienen marcadas.
-3. Reiniciá la computadora.
-4. Abrí **Docker Desktop** desde el menú de inicio.
-5. Esperá hasta que el ícono en la barra de tareas deje de moverse.
+1. Entra a https://www.docker.com/products/docker-desktop
+2. Baja el instalador y ábrelo. Deja las opciones que vienen marcadas.
+3. Reinicia el computador.
+4. Abre **Docker Desktop** desde el menú de inicio.
+5. Espera hasta que el ícono en la barra de tareas deje de moverse.
 
 ---
 
 ### Paso 2 — Descargar los archivos de Vibe
 
-Copiá y pegalo **completo** en PowerShell:
+Copia y pégalo **completo** en PowerShell:
 
 ```powershell
 mkdir vibe-deploy; cd vibe-deploy
@@ -89,14 +89,14 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/crisdata/proyecto-chat
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/crisdata/proyecto-chat-distribuido/main/.env.example" -OutFile ".env"
 ```
 
-> Esto crea una carpeta `vibe-deploy` y descarga dos archivos. No necesitás
+> Esto crea una carpeta `vibe-deploy` y descarga dos archivos. No necesitas
 > clonar nada ni instalar Git.
 
 ---
 
 ### Paso 3 — Crear las claves de seguridad
 
-Copiá y pegalo **completo** en PowerShell:
+Copia y pégalo **completo** en PowerShell:
 
 ```powershell
 function New-Clave {
@@ -112,13 +112,13 @@ $worker = New-Clave
   Set-Content -Path .env -Encoding ascii
 ```
 
-Verificá que funcionó:
+Verifica que funcionó:
 
 ```powershell
 Select-String -Path .env -Pattern "JWT_SECRET|WORKER_SECRET"
 ```
 
-Debés ver dos líneas con valores largos aleatorios (no el texto `cambia_esta_clave`).
+Debes ver dos líneas con valores largos aleatorios (no el texto `cambia_esta_clave`).
 
 > **¿Qué hace esto?** Genera dos contraseñas secretas para que el sistema sea
 > seguro. Sin esto igual arranca, pero cualquiera podría falsificar sesiones.
@@ -128,7 +128,7 @@ Debés ver dos líneas con valores largos aleatorios (no el texto `cambia_esta_c
 
 ### Paso 4 — Levantar el sistema
 
-Copiá y pegalo en PowerShell:
+Copia y pégalo en PowerShell:
 
 ```powershell
 docker compose -f docker-compose.prod.yml up -d
@@ -137,31 +137,31 @@ docker compose -f docker-compose.prod.yml up -d
 La primera vez **descarga unos 600 MB** (tarda entre 3 y 5 minutos).
 Las veces siguientes arranca en segundos.
 
-Verificá que todo esté corriendo:
+Verifica que todo esté corriendo:
 
 ```powershell
 docker compose -f docker-compose.prod.yml ps
 ```
 
-Debés ver 7 servicios con estado `Up` o `healthy`. Si alguno dice `starting`,
-esperá un minuto y volvé a verificar.
+Debes ver 7 servicios con estado `Up` o `healthy`. Si alguno dice `starting`,
+espera un minuto y vuelve a verificar.
 
 ---
 
 ### Paso 5 — Abrir la aplicación
 
-Esperá 30 segundos (hasta 90 en computadoras lentas). Luego abrí tu navegador
+Espera 30 segundos (hasta 90 en computadores con pocos recursos). Luego abre tu navegador
 en:
 
 ```text
 http://localhost
 ```
 
-Iniciá sesión con **cualquier correo** de prueba. Si es la primera vez que ese
-correo entra, Vibe te pide un nombre visible. Si ya existe, entrás directo.
+Inicia sesión con **cualquier correo** de prueba. Si es la primera vez que ese
+correo entra, Vibe te pide un nombre visible. Si ya existe, entras directo.
 
-> **¿No abre?** Volvé a ejecutar `docker compose -f docker-compose.prod.yml ps`
-> y fijate que los 7 servicios estén en verde. Si hay alguno en rojo, andá a
+> **¿No abre?** Vuelve a ejecutar `docker compose -f docker-compose.prod.yml ps`
+> y fíjate que los 7 servicios estén en verde. Si hay alguno en rojo,
 > [¿Algo falló?](#algo-falló).
 
 ---
@@ -170,11 +170,11 @@ correo entra, Vibe te pide un nombre visible. Si ya existe, entrás directo.
 
 ### Prueba 1 — Chat entre dos personas
 
-1. Entrá con el correo **alice@example.com**. Si te pide nombre, poné **Alice**.
-2. Abrí una **ventana de incógnito** (Ctrl+Shift+N).
-3. Andá a http://localhost y entrá con **bob@example.com** (nombre: **Bob**).
+1. Entra con el correo **alice@example.com**. Si te pide nombre, pon **Alice**.
+2. Abre una **ventana de incógnito** (Ctrl+Shift+N).
+3. Ve a http://localhost y entra con **bob@example.com** (nombre: **Bob**).
 4. En la ventana de Alice, Bob aparece solo en la lista de contactos.
-5. Clic en Bob, escribí un mensaje.
+5. Clic en Bob, escribe un mensaje.
 6. En la ventana de Bob: el mensaje aparece al instante.
 
 > **Si ves esto**, el chat entre personas, las notificaciones y la base de
@@ -183,15 +183,15 @@ correo entra, Vibe te pide un nombre visible. Si ya existe, entrás directo.
 ### Prueba 2 — Mensaje que se autodestruye
 
 1. Dentro de cualquier chat, clic en el ícono de llama 🔥 (se pone rojo).
-2. Enviá un mensaje. Aparece un contador de 30 segundos.
+2. Envía un mensaje. Aparece un contador de 30 segundos.
 3. Cuando llega a cero, el mensaje desaparece solo.
 
 ### Prueba 3 — Grupos públicos
 
 1. Clic en **Nuevo chat** → pestaña **Crear**.
-2. Escribí un nombre (ej: "Programación") y creá el grupo.
-3. Desde la otra ventana (Bob), andá a **Nuevo chat → Grupos**, buscá el grupo
-   y uníte.
+2. Escribe un nombre (ej: "Programación") y crea el grupo.
+3. Desde la otra ventana (Bob), ve a **Nuevo chat → Grupos**, busca el grupo
+   y únete.
 4. Alice escribe en el grupo. Bob lo ve al instante si está dentro del grupo.
 5. Si Bob está en otro chat, aparece un numerito rojo de no leído en el grupo.
 6. Los mensajes muestran el nombre de quién los escribió.
@@ -199,22 +199,22 @@ correo entra, Vibe te pide un nombre visible. Si ya existe, entrás directo.
 ### Prueba 4 — Chatear con Lumi
 
 1. Lumi está anclada arriba en la lista de contactos (avatar violeta).
-2. Escribile algo. Responde con mensajes empáticos aunque no hayas descargado
+2. Escríbele algo. Responde con mensajes empáticos aunque no hayas descargado
    el modelo de IA.
 
 ### Prueba 5 — Modo sin memoria
 
 1. En el chat con Lumi, clic en el ojo 👁 del encabezado. Cambia a 🚫 **Sin memoria**.
-2. Enviá mensajes. Se ven en vivo pero **no se guardan**.
-3. Volvé a **Con memoria**: los mensajes sin memoria ya no aparecen.
+2. Envía mensajes. Se ven en vivo pero **no se guardan**.
+3. Vuelve a **Con memoria**: los mensajes sin memoria ya no aparecen.
 
 ### Prueba 6 — Trazabilidad
 
-1. Activá las herramientas de [observabilidad](#herramientas-de-observabilidad).
-2. Abrí Dozzle en http://localhost:9999, clic en `chat_api`.
-3. Enviá un mensaje en la app.
-4. Buscá en los logs un código entre corchetes (ej: `[b7d4a2e1]`).
-5. Escribí ese código en el buscador y alterná entre `chat_api` y `chat_worker`:
+1. Activa las herramientas de [observabilidad](#herramientas-de-observabilidad).
+2. Abre Dozzle en http://localhost:9999, clic en `chat_api`.
+3. Envía un mensaje en la app.
+4. Busca en los logs un código entre corchetes (ej: `[b7d4a2e1]`).
+5. Escribe ese código en el buscador y alterna entre `chat_api` y `chat_worker`:
    el mismo código aparece en ambos. El mensaje se rastreó de punta a punta.
 
 ---
@@ -224,19 +224,19 @@ correo entra, Vibe te pide un nombre visible. Si ya existe, entrás directo.
 Lumi usa un modelo de IA de ~2 GB. Hay que descargarlo una sola vez. La
 descarga tarda entre 3 y 10 minutos.
 
-Asegurate de que el sistema esté corriendo (`docker compose -f docker-compose.prod.yml ps`).
+Asegúrate de que el sistema esté corriendo (`docker compose -f docker-compose.prod.yml ps`).
 
-Copiá y pegalo en PowerShell:
+Copia y pégalo en PowerShell:
 
 ```powershell
 $NETWORK = docker network ls --format "{{.Name}}" | Where-Object { $_ -like "*public_network*" } | Select-Object -First 1
-if (-not $NETWORK) { Write-Host "Primero levantá el sistema con docker compose up -d"; exit 1 }
+if (-not $NETWORK) { Write-Host "Primero levanta el sistema con docker compose up -d"; exit 1 }
 docker network connect $NETWORK chat_ollama
 docker exec -i chat_ollama ollama pull llama3.2:3b
 docker network disconnect $NETWORK chat_ollama
 ```
 
-Verificá que el modelo quedó instalado:
+Verifica que el modelo quedó instalado:
 
 ```powershell
 docker exec chat_ollama ollama list
@@ -253,8 +253,8 @@ Debe aparecer `llama3.2:3b` en la lista.
 
 ### "Unexpected token '<'... is not valid JSON" al iniciar sesión
 
-La API todavía está arrancando. Esperá hasta 90 segundos y recargá la página.
-Si persiste, revisá los logs:
+La API todavía está arrancando. Espera hasta 90 segundos y recarga la página.
+Si persiste, revisa los logs:
 
 ```powershell
 docker logs chat_api --tail 30
@@ -265,7 +265,7 @@ La última línea debe decir "API lista para recibir solicitudes".
 ### Error "Access denied for user 'chat_user'"
 
 Las credenciales de la base de datos quedaron desfasadas (pasa si cambiaste el
-`.env` después del primer arranque). Borrá todo y volvé a empezar:
+`.env` después del primer arranque). Borra todo y vuelve a empezar:
 
 ```powershell
 docker compose -f docker-compose.prod.yml down -v
@@ -282,18 +282,18 @@ docker compose -f docker-compose.prod.yml down -v
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Esperá 90 segundos y verificá con `docker compose -f docker-compose.prod.yml ps`.
+Espera 90 segundos y verifica con `docker compose -f docker-compose.prod.yml ps`.
 
 ### Error sobre JWT_SECRET o WORKER_SECRET
 
-Las claves no se generaron bien o quedaron duplicadas. Revisá:
+Las claves no se generaron bien o quedaron duplicadas. Revisa:
 
 ```powershell
 Select-String -Path .env -Pattern "JWT_SECRET|WORKER_SECRET"
 ```
 
-Si ves `cambia_esta_clave` o la misma clave repetida, volvé al
-[Paso 3](#paso-3-crear-las-claves-de-seguridad) y ejecutalo de nuevo.
+Si ves `cambia_esta_clave` o la misma clave repetida, vuelve al
+[Paso 3](#paso-3-crear-las-claves-de-seguridad) y ejecútalo de nuevo.
 Luego:
 
 ```powershell
@@ -302,7 +302,7 @@ docker compose -f docker-compose.prod.yml restart api
 
 ### Lumi responde "Estoy descansando..."
 
-Normal: no descargaste el modelo de IA. Andá a
+Normal: no descargaste el modelo de IA. Ve a
 [Activar a Lumi](#activar-a-lumi-opcional).
 
 ### Lumi tarda más de un minuto en responder
@@ -312,13 +312,13 @@ siguientes respuestas tardan entre 3 y 15 segundos.
 
 ### "Cannot connect to the Docker daemon"
 
-Docker Desktop no está corriendo. Abrilo desde el menú de inicio, esperá a que
-el ícono se estabilice, y volvé a intentar.
+Docker Desktop no está corriendo. Ábrelo desde el menú de inicio, espera a que
+el ícono se estabilice, y vuelve a intentar.
 
 ### "port is already allocated"
 
-Hay otro programa usando el mismo puerto. Buscá contenedores viejos y
-eliminalos:
+Hay otro programa usando el mismo puerto. Busca contenedores viejos y
+elimínalos:
 
 ```powershell
 docker ps -a
@@ -327,14 +327,14 @@ docker rm -f <nombre-del-contenedor>
 
 ### El frontend se ve viejo después de actualizar
 
-El navegador guardó una copia en caché. Actualizá imágenes y forzá recreación:
+El navegador guardó una copia en caché. Actualiza imágenes y fuerza recreación:
 
 ```powershell
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d --force-recreate
 ```
 
-También podés recargar con Ctrl+Shift+R.
+También puedes recargar con Ctrl+Shift+R.
 
 ### Limpiar todo y volver a empezar
 
@@ -342,7 +342,7 @@ También podés recargar con Ctrl+Shift+R.
 docker compose -f docker-compose.prod.yml down -v
 ```
 
-Esto borra chats, usuarios, grupos y el modelo de IA. Después volvé a
+Esto borra chats, usuarios, grupos y el modelo de IA. Después vuelve a
 levantar con:
 
 ```powershell
@@ -465,7 +465,7 @@ Imágenes: https://hub.docker.com/u/crisdatap
 
 ## 🔵 Endpoints de la API
 
-Exploralos visualmente en http://localhost/api/docs (Swagger UI).
+Explóralos visualmente en http://localhost/api/docs (Swagger UI).
 
 | Método | Endpoint | Descripción |
 |---|---|---|
@@ -517,7 +517,7 @@ respuesta.
 
 ## 🔵 Comandos del Makefile
 
-> Solo funcionan en WSL / Ubuntu. En PowerShell usá los comandos Docker
+> Solo funcionan en WSL / Ubuntu. En PowerShell usa los comandos Docker
 > completos que aparecen en cada caso.
 
 ### Producción
@@ -583,7 +583,7 @@ proyecto-chat-distribuido/
 
 ## 🔵 Instalación para desarrollo
 
-Solo si querés **modificar el código fuente**. Si no, usá la
+Solo si quieres **modificar el código fuente**. Si no, usa la
 [guía normal](#guía-de-instalación-5-pasos).
 
 ```bash
@@ -615,19 +615,19 @@ docker compose up -d --force-recreate frontend
 
 ## 🔵 Camino alternativo con WSL / Ubuntu
 
-Si preferís usar WSL (Ubuntu dentro de Windows) en lugar de PowerShell, esta
+Si prefieres usar WSL (Ubuntu dentro de Windows) en lugar de PowerShell, esta
 es la guía equivalente.
 
 ### Requisitos extra
 
-Instalá Python, Make y Git dentro de Ubuntu:
+Instala Python, Make y Git dentro de Ubuntu:
 
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-pip make git
 ```
 
-Activá la integración con Docker Desktop: **Settings → Resources → WSL
+Activa la integración con Docker Desktop: **Settings → Resources → WSL
 Integration → Enable integration with my default WSL distro → Apply &
 restart**.
 
@@ -651,7 +651,7 @@ make prod-up
 # 4. Verificar
 make prod-status
 
-# 5. Abrí http://localhost en tu navegador
+# 5. Abre http://localhost en tu navegador
 
 # 6. Descargar modelo de IA (opcional)
 make prod-pull-model
