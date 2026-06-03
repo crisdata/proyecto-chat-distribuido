@@ -349,6 +349,27 @@ levantar con:
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+### Activé la observabilidad y ahora la API no arranca
+
+El comando `docker compose --profile observability up -d` **sin nombre de
+servicios** recrea todos los contenedores, incluyendo Redis y la base de
+datos. Esto puede romper la autenticación. La forma segura es especificar
+solo los servicios nuevos:
+
+```powershell
+docker compose -f docker-compose.prod.yml --profile observability up -d dozzle redis-commander portainer
+```
+
+Si el sistema ya está roto, reconstruí las imágenes y reiniciá desde cero:
+
+```powershell
+docker build -t crisdatap/vibe-api:latest .
+docker build -t crisdatap/vibe-worker:latest -f Dockerfile.worker .
+docker build -t crisdatap/vibe-frontend:latest -f frontend/Dockerfile frontend/
+docker compose -f docker-compose.prod.yml down -v
+docker compose -f docker-compose.prod.yml up -d
+```
+
 ---
 
 ## 🟡 Qué es Vibe
@@ -440,7 +461,7 @@ Siempre disponibles:
 Herramientas **opcionales** (activar con un comando extra):
 
 ```powershell
-docker compose -f docker-compose.prod.yml --profile observability up -d
+docker compose -f docker-compose.prod.yml --profile observability up -d dozzle redis-commander portainer
 ```
 
 | Herramienta | URL | Para qué |
