@@ -176,10 +176,16 @@ export async function marcarComoLeidos(usuarioId, contactoId) {
 
 // ── Inteligencia Artificial ───────────────────────────────────────────────
 
-export async function enviarMensajeIA(emisor_id, ia_id, contenido, modo = "con_memoria") {
-	const endpoint = modo === "sin_memoria"
-		? `${BASE_URL}/ia/mensaje/modo`
-		: `${BASE_URL}/ia/mensaje`;
+export async function enviarMensajeIA(
+	emisor_id,
+	ia_id,
+	contenido,
+	modo = "con_memoria",
+) {
+	const endpoint =
+		modo === "sin_memoria"
+			? `${BASE_URL}/ia/mensaje/modo`
+			: `${BASE_URL}/ia/mensaje`;
 
 	const res = await fetch(endpoint, {
 		method: "POST",

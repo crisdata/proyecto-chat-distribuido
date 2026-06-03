@@ -3,7 +3,17 @@
 // Header muestra estado de presencia real (En línea / Activo hace X / Reposando).
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Bot, User, Loader, Shield, Flame, Users, Eye, EyeOff } from "lucide-react";
+import {
+	Send,
+	Bot,
+	User,
+	Loader,
+	Shield,
+	Flame,
+	Users,
+	Eye,
+	EyeOff,
+} from "lucide-react";
 import Mensaje from "./Mensaje";
 import {
 	enviarMensaje,
@@ -212,11 +222,14 @@ export default function Chat({
 				{!esGrupo && (
 					<button
 						title={esSinMemoria ? "Modo sin memoria" : "Modo con memoria"}
-						onClick={() => setModo(esSinMemoria ? "con_memoria" : "sin_memoria")}
+						onClick={() =>
+							setModo(esSinMemoria ? "con_memoria" : "sin_memoria")
+						}
 						className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
 							esSinMemoria
 								? "bg-amber-500/15 text-amber-400"
-								: "bg-vibe-800 text-vibe-500 hover:text-cyan-400"}`}
+								: "bg-vibe-800 text-vibe-500 hover:text-cyan-400"
+						}`}
 					>
 						{esSinMemoria ? <EyeOff size={15} /> : <Eye size={15} />}
 					</button>
