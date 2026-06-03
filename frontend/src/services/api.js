@@ -275,6 +275,16 @@ export async function enviarMensajeGrupo(grupoId, contenido) {
 	return res.json();
 }
 
+export async function enviarMensajeSinMemoria(emisor_id, receptor_id, contenido) {
+	const res = await fetch(`${BASE_URL}/mensaje_privado/sin_memoria`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...authHeaders() },
+		body: JSON.stringify({ emisor_id, receptor_id, contenido }),
+	});
+	if (!res.ok) throw new Error("Error al enviar mensaje sin memoria");
+	return res.json();
+}
+
 // ── WebSocket ─────────────────────────────────────────────────────────────
 
 export function crearWebSocket(usuarioId, onMensaje, onEstado) {

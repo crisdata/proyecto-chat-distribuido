@@ -18,6 +18,7 @@ import Mensaje from "./Mensaje";
 import {
 	enviarMensaje,
 	enviarMensajeIA,
+	enviarMensajeSinMemoria,
 	obtenerConversacionBilateral,
 	mensajesGrupo,
 	enviarMensajeGrupo,
@@ -33,6 +34,8 @@ export default function Chat({
 	iaId,
 	presencias = {},
 	actualizacionMensajes = 0,
+	mensajeSinMemoriaEntrante = null,
+	onConsumirSinMemoria = null,
 }) {
 	const [mensajes, setMensajes] = useState([]);
 	const [texto, setTexto] = useState("");
@@ -82,6 +85,23 @@ export default function Chat({
 		finalRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [mensajes]);
 
+	// Recibir mensaje sin memoria desde WebSocket
+	useEffect(() => {
+		if (!mensajeSinMemoriaEntrante || !esSinMemoria) return;
+
+		setMensajesLocales((prev) => [
+			...prev,
+			{
+				id: null,
+				emisor_id: mensajeSinMemoriaEntrante.emisor_id,
+				receptor_id: usuarioActual.id,
+				contenido: mensajeSinMemoriaEntrante.contenido,
+				timestamp: new Date().toISOString(),
+			},
+		]);
+		onConsumirSinMemoria?.();
+	}, [mensajeSinMemoriaEntrante]);
+
 	async function handleEnviar() {
 		const contenido = texto.trim();
 		if (!contenido || enviando) return;
@@ -94,11 +114,13 @@ export default function Chat({
 				await enviarMensajeGrupo(contacto.id, contenido);
 			} else if (esIA) {
 				await enviarMensajeIA(usuarioActual.id, iaId, contenido, modo);
+			} else if (esSinMemoria && !esIA) {
+				await enviarMensajeSinMemoria(usuarioActual.id, contacto.id, contenido);
 			} else {
 				const expiraEn = modoAutodestructivo ? 30 : null;
 				await enviarMensaje(usuarioActual.id, contacto.id, contenido, expiraEn);
 			}
-			await cargarConversacion();
+			if (!esSinMemoria) await cargarConversacion();
 		} catch (error) {
 			console.error("Error al enviar mensaje:", error);
 			setTexto(contenido);

@@ -32,6 +32,7 @@ export default function App() {
 	const [cargandoSesion, setCargandoSesion] = useState(true);
 	const [noLeidos, setNoLeidos] = useState({ total: 0, porContacto: {} });
 	const [actualizacionMensajes, setActualizacionMensajes] = useState(0);
+	const [mensajeSinMemoriaEntrante, setMensajeSinMemoriaEntrante] = useState(null);
 
 	const huellaContactosRef = useRef("");
 	const contactoActivoRef = useRef(null);
@@ -146,6 +147,10 @@ export default function App() {
 		const cerrarWS = crearWebSocket(
 			usuario.id,
 			(datos) => {
+				if (datos.tipo === "mensaje_sin_memoria") {
+					setMensajeSinMemoriaEntrante(datos);
+					return;
+				}
 				if (datos.tipo !== "nuevo_mensaje") return;
 
 				const emisorId = datos.emisor_id;
@@ -257,6 +262,8 @@ export default function App() {
 					iaId={iaId}
 					presencias={presencias}
 					actualizacionMensajes={actualizacionMensajes}
+				mensajeSinMemoriaEntrante={mensajeSinMemoriaEntrante}
+				onConsumirSinMemoria={() => setMensajeSinMemoriaEntrante(null)}
 				/>
 			) : (
 				<div className="flex-1 flex flex-col items-center justify-center bg-vibe-950">
