@@ -21,7 +21,7 @@ export default function Mensaje({
 	// Contador regresivo para mensajes autodestructivos
 	const [segundosRestantes, setSegundosRestantes] = useState(() => {
 		if (!mensaje.expira_en) return null;
-		const expira = new Date(mensaje.expira_en).getTime();
+		const expira = new Date(mensaje.expira_en + "Z").getTime();
 		const ahora = Date.now();
 		return Math.max(0, Math.floor((expira - ahora) / 1000));
 	});
