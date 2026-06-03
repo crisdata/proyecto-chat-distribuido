@@ -170,5 +170,44 @@ async def crear_tablas():
                 """)
             except Exception:
                 pass  # Ya existe, ignorar
+
+            # ── Tablas de grupos públicos ────────────────────────────────────
+
+            await cursor.execute("""
+                CREATE TABLE IF NOT EXISTS grupos (
+                    id VARCHAR(36) PRIMARY KEY,
+                    nombre VARCHAR(100) NOT NULL,
+                    nombre_normalizado VARCHAR(100) NOT NULL UNIQUE,
+                    creado_por VARCHAR(36) NOT NULL,
+                    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (creado_por) REFERENCES usuarios(id)
+                )
+            """)
+
+            await cursor.execute("""
+                CREATE TABLE IF NOT EXISTS grupo_miembros (
+                    grupo_id VARCHAR(36) NOT NULL,
+                    usuario_id VARCHAR(36) NOT NULL,
+                    unido_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (grupo_id, usuario_id),
+                    FOREIGN KEY (grupo_id) REFERENCES grupos(id),
+                    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+                )
+            """)
+
+            await cursor.execute("""
+                CREATE TABLE IF NOT EXISTS mensajes_grupo (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    grupo_id VARCHAR(36) NOT NULL,
+                    emisor_id VARCHAR(36) NOT NULL,
+                    contenido TEXT NOT NULL,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expira_en TIMESTAMP NULL DEFAULT NULL,
+                    FOREIGN KEY (grupo_id) REFERENCES grupos(id),
+                    FOREIGN KEY (emisor_id) REFERENCES usuarios(id),
+                    INDEX idx_mensajes_grupo (grupo_id, id),
+                    INDEX idx_mensajes_grupo_emisor (emisor_id)
+                )
+            """)
     finally:
         await release_connection(conn)

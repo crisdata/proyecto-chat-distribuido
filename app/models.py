@@ -121,6 +121,58 @@ class MensajeResponse(BaseModel):
     expira_en: Optional[datetime] = None
 
 
+# ── Grupos ────────────────────────────────────────────────────────────────────
+
+class GrupoCreate(BaseModel):
+    """Datos necesarios para crear un grupo público."""
+    nombre: str
+
+    @field_validator("nombre")
+    @classmethod
+    def validar_nombre_grupo(cls, v: str) -> str:
+        return validar_nombre_visible(v)
+
+
+class GrupoResponse(BaseModel):
+    """Datos que se devuelven al consultar un grupo."""
+    id: str
+    nombre: str
+    creado_por: str
+    creado_en: Optional[datetime] = None
+    es_miembro: bool = False
+    modo: str = "grupo_publico"
+
+
+class MensajeGrupoCreate(BaseModel):
+    """Datos para enviar un mensaje a un grupo."""
+    contenido: str
+
+    @field_validator("contenido")
+    @classmethod
+    def validar_contenido(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) == 0:
+            raise ValueError("El contenido del mensaje no puede estar vacío.")
+        if len(v) > 2000:
+            raise ValueError("El mensaje no puede superar los 2000 caracteres.")
+        return v
+
+
+class MensajeGrupoResponse(BaseModel):
+    """Estructura de un mensaje de grupo."""
+    id: Optional[int] = None
+    grupo_id: Optional[str] = None
+    emisor_id: str
+    contenido: str
+    timestamp: Optional[datetime] = None
+
+
+class UnirseGrupoResponse(BaseModel):
+    """Respuesta al unirse a un grupo."""
+    unido: bool
+    grupo_id: str
+
+
 # ── Respuestas generales ──────────────────────────────────────────────────────
 
 class RespuestaExito(BaseModel):
