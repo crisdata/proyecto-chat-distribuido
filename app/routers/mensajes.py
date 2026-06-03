@@ -21,8 +21,7 @@ from app.database import get_connection, release_connection
 from app.cache import (
     obtener_usuario_cache, cachear_usuario,
     obtener_no_leidos_por_contacto,
-    resetear_no_leidos_con,
-    resetear_todos_no_leidos
+    resetear_no_leidos_con
 )
 from app.queue import publicar
 from app.routers.websocket import manager
@@ -131,16 +130,20 @@ async def enviar_mensaje(
 
 @router.get(
     "/conversacion/{usuario_id}",
-    response_model=list[MensajeResponse]
+    response_model=list[MensajeResponse],
+    deprecated=True
 )
 async def consultar_conversacion(
     usuario_id: str,
     payload: dict = Depends(autenticar_usuario_actual)
 ):
     """
-    Retorna el historial de mensajes recibidos por un usuario,
+    Endpoint legado: retorna solo los mensajes recibidos por un usuario,
     ordenados cronológicamente.
-    Resetea el contador de mensajes no leídos al consultar.
+
+    Se mantiene por compatibilidad, pero el frontend debe usar
+    /conversacion/{usuario_id}/{contacto_id}, que retorna la conversación
+    bilateral paginada y permite limpiar solo el contador del contacto activo.
     """
     if usuario_id != payload["sub"]:
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -163,8 +166,6 @@ async def consultar_conversacion(
                 (usuario_id,)
             )
             mensajes = await cursor.fetchall()
-
-        await resetear_todos_no_leidos(usuario_id)
 
         return [
             {
