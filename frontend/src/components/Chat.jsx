@@ -173,17 +173,21 @@ export default function Chat({
 						<Users size={20} className="text-cyan-400" />
 					</div>
 				) : (
-				<div className="relative flex-shrink-0">
-					<div
-						style={getAvatarStyle(contacto.nombre, esIA)}
-						className={`w-10 h-10 rounded-full flex items-center justify-center
+					<div className="relative flex-shrink-0">
+						<div
+							style={getAvatarStyle(contacto.nombre, esIA)}
+							className={`w-10 h-10 rounded-full flex items-center justify-center
 						font-semibold
 						${esIA ? "text-white" : ""}`}
-					>
-						{esIA ? <Bot size={20} /> : contacto.nombre.charAt(0).toUpperCase()}
+						>
+							{esIA ? (
+								<Bot size={20} />
+							) : (
+								contacto.nombre.charAt(0).toUpperCase()
+							)}
+						</div>
+						<IndicadorPresencia estado={estado} tamano="sm" />
 					</div>
-					<IndicadorPresencia estado={estado} tamano="sm" />
-				</div>
 				)}
 
 				<div className="flex-1">
@@ -224,8 +228,13 @@ export default function Chat({
 						<div
 							className={`w-16 h-16 rounded-full flex items-center
 								justify-center
-								${esGrupo ? "bg-cyan-500/15"
-								: esIA ? "bg-lumi-400/15" : "bg-cyan-500/15"}`}
+								${
+									esGrupo
+										? "bg-cyan-500/15"
+										: esIA
+											? "bg-lumi-400/15"
+											: "bg-cyan-500/15"
+								}`}
 						>
 							{esGrupo ? (
 								<Users size={32} className="text-cyan-400" />

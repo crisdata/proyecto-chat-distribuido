@@ -214,9 +214,12 @@ export async function crearGrupo(nombre) {
 }
 
 export async function buscarGrupos(q) {
-	const res = await fetch(`${BASE_URL}/grupos/buscar?q=${encodeURIComponent(q)}`, {
-		headers: authHeaders(),
-	});
+	const res = await fetch(
+		`${BASE_URL}/grupos/buscar?q=${encodeURIComponent(q)}`,
+		{
+			headers: authHeaders(),
+		},
+	);
 	if (!res.ok) throw new Error("Error al buscar grupos");
 	return res.json();
 }
@@ -238,7 +241,10 @@ export async function unirseAGrupo(grupoId) {
 	return res.json();
 }
 
-export async function mensajesGrupo(grupoId, { limit = 50, beforeId = null } = {}) {
+export async function mensajesGrupo(
+	grupoId,
+	{ limit = 50, beforeId = null } = {},
+) {
 	const params = new URLSearchParams({ limit: String(limit) });
 	if (beforeId) params.set("before_id", String(beforeId));
 	const res = await fetch(

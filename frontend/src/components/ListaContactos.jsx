@@ -165,21 +165,31 @@ export default function ListaContactos({
 
 				{/* Grupos unidos */}
 				{grupos.map((grupo) => {
-					const activo = contactoActivo?.tipo === "grupo" && contactoActivo?.id === grupo.id;
+					const activo =
+						contactoActivo?.tipo === "grupo" && contactoActivo?.id === grupo.id;
 					return (
-						<button key={grupo.id}
+						<button
+							key={grupo.id}
 							onClick={() => onSeleccionarGrupo?.(grupo)}
 							className={`w-full flex items-center gap-3 px-4 py-3
 								transition text-left border-b border-vibe-800/50
-								${activo ? "bg-cyan-500/10 border-l-4 border-l-cyan-500"
-									: "hover:bg-vibe-800/50"}`}>
-							<div className="w-11 h-11 rounded-full bg-cyan-500/15
-								flex items-center justify-center flex-shrink-0">
+								${
+									activo
+										? "bg-cyan-500/10 border-l-4 border-l-cyan-500"
+										: "hover:bg-vibe-800/50"
+								}`}
+						>
+							<div
+								className="w-11 h-11 rounded-full bg-cyan-500/15
+								flex items-center justify-center flex-shrink-0"
+							>
 								<Users size={20} className="text-cyan-400" />
 							</div>
 							<div className="flex-1 min-w-0">
-								<span className={`text-sm font-medium truncate
-									${activo ? "text-cyan-400" : "text-vibe-200"}`}>
+								<span
+									className={`text-sm font-medium truncate
+									${activo ? "text-cyan-400" : "text-vibe-200"}`}
+								>
 									{grupo.nombre}
 								</span>
 								<p className="text-xs text-vibe-500">Grupo público</p>
