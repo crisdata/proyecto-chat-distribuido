@@ -5,7 +5,7 @@
 // estilo WhatsApp/Telegram.
 
 import { useState, useMemo } from "react";
-import { Search, Bot, User, PenSquare } from "lucide-react";
+import { Search, Bot, User, Users, PenSquare } from "lucide-react";
 import { formatearHora } from "../utils/tiempo";
 import { getAvatarStyle } from "../utils/avatarColors";
 import IndicadorPresencia from "./IndicadorPresencia";
