@@ -258,15 +258,6 @@ async def resetear_todos_no_leidos(receptor_id: str):
             break
 
 
-# Alias de compatibilidad con código antiguo.
-# Mantienen las firmas viejas pero ya no se usan internamente.
-# Marcadas como deprecadas para limpieza futura.
-
-async def incrementar_mensajes_no_leidos(usuario_id: str):
-    """DEPRECADO: usa incrementar_no_leidos_de(receptor, emisor) en su lugar."""
-    pass  # Ya no hace nada — sistema migrado a contadores por contacto
-
-
 async def obtener_mensajes_no_leidos(usuario_id: str) -> int:
     """
     Retorna el TOTAL de mensajes no leídos sumando todos los contadores
@@ -274,11 +265,6 @@ async def obtener_mensajes_no_leidos(usuario_id: str) -> int:
     """
     por_contacto = await obtener_no_leidos_por_contacto(usuario_id)
     return sum(por_contacto.values())
-
-
-async def resetear_mensajes_no_leidos(usuario_id: str):
-    """DEPRECADO: usa resetear_no_leidos_con(receptor, emisor) en su lugar."""
-    await resetear_todos_no_leidos(usuario_id)
 
 
 # ── Caché de sesiones JWT (Corte 3) ───────────────────────────────────────────
