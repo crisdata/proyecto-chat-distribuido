@@ -3,6 +3,7 @@
 # Configura la aplicación, registra los routers y gestiona
 # el ciclo de vida de las conexiones a MariaDB, Redis, Ollama y RabbitMQ.
 
+import asyncio
 import logging
 import os
 from fastapi import FastAPI, Request
@@ -18,7 +19,7 @@ configurar_logging()
 from app.routers import usuarios, mensajes, ia, websocket
 from app.routers.interno import router as interno_router
 from app.routers.ia import registrar_nodo_ia
-from app.database import conectar, desconectar, crear_tablas
+from app.database import conectar, desconectar, crear_tablas, get_connection, release_connection
 from app.cache import conectar_redis, desconectar_redis
 from app.queue import conectar_queue, desconectar_queue
 from app.request_id import (
@@ -53,6 +54,31 @@ async def lifespan(app: FastAPI):
 
     log.info("Conectando a RabbitMQ")
     await conectar_queue()
+
+    # Pre-calentar el modelo de IA en background para no bloquear el arranque.
+    # Si falla, no es crítico: el primer mensaje usará fallback empático.
+    log.info("Lanzando pre-calentamiento de Lumi en background")
+    from app.routers.ia import precalentar_modelo
+    asyncio.create_task(precalentar_modelo())
+
+    # Tarea de limpieza: elimina mensajes autodestructivos expirados cada 30s
+    async def limpiar_mensajes_expirados():
+        while True:
+            await asyncio.sleep(30)
+            try:
+                conn = await get_connection()
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        "DELETE FROM mensajes WHERE expira_en IS NOT NULL AND expira_en <= NOW()"
+                    )
+                    eliminados = cursor.rowcount
+                    if eliminados > 0:
+                        log.info(f"Limpieza: {eliminados} mensaje(s) autodestructivo(s) eliminado(s)")
+                await release_connection(conn)
+            except Exception as e:
+                log.warning(f"Error en limpieza de mensajes expirados: {e}")
+
+    asyncio.create_task(limpiar_mensajes_expirados())
 
     log.info("API lista para recibir solicitudes")
 

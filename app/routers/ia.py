@@ -115,7 +115,7 @@ async def verificar_ollama_disponible() -> bool:
     Si responde, está disponible. Si falla por cualquier razón, no lo está.
     """
     try:
-        cliente = AsyncClient(host=OLLAMA_URL, timeout=5)
+        cliente = AsyncClient(host=OLLAMA_URL, timeout=10)
         await cliente.list()
         return True
     except Exception:
@@ -215,9 +215,8 @@ async def registrar_nodo_ia():
 
         log.info(f"Nodo IA '{NOMBRE_IA}' activo con ID {ia_id}")
 
-        # Pre-calentar el modelo para que el primer mensaje del usuario
-        # tenga una respuesta rápida en lugar de fallback por timeout.
-        await precalentar_modelo()
+        # El pre-calentamiento del modelo se hace en background desde main.py
+        # para no bloquear el arranque de la API.
 
         return ia_id
 
@@ -303,8 +302,9 @@ async def mensaje_a_ia(
                 """SELECT emisor_id, contenido FROM (
                        SELECT emisor_id, contenido, timestamp
                        FROM mensajes
-                       WHERE (emisor_id = %s AND receptor_id = %s)
-                          OR (emisor_id = %s AND receptor_id = %s)
+                       WHERE ((emisor_id = %s AND receptor_id = %s)
+                          OR (emisor_id = %s AND receptor_id = %s))
+                         AND (expira_en IS NULL OR expira_en > NOW())
                        ORDER BY timestamp DESC
                        LIMIT 10
                    ) sub

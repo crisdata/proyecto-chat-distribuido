@@ -127,6 +127,7 @@ async def crear_tablas():
                     receptor_id VARCHAR(36) NOT NULL,
                     contenido TEXT NOT NULL,
                     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expira_en TIMESTAMP NULL DEFAULT NULL,
                     FOREIGN KEY (emisor_id) REFERENCES usuarios(id),
                     FOREIGN KEY (receptor_id) REFERENCES usuarios(id),
                     INDEX idx_receptor (receptor_id),
@@ -134,5 +135,13 @@ async def crear_tablas():
                     INDEX idx_conversacion (emisor_id, receptor_id)
                 )
             """)
+
+            # Migración: agregar columna expira_en si no existe (para BD existentes)
+            try:
+                await cursor.execute("""
+                    ALTER TABLE mensajes ADD COLUMN expira_en TIMESTAMP NULL DEFAULT NULL
+                """)
+            except Exception:
+                pass  # Ya existe, ignorar
     finally:
         await release_connection(conn)

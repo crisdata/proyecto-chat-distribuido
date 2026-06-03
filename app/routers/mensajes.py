@@ -91,15 +91,22 @@ async def enviar_mensaje(
         # Persistir mensaje en MariaDB de forma síncrona
         # La persistencia nunca se delega — es la fuente de verdad
         async with conn.cursor() as cursor:
-            await cursor.execute(
-                """INSERT INTO mensajes (emisor_id, receptor_id, contenido)
-                   VALUES (%s, %s, %s)""",
-                (datos.emisor_id, datos.receptor_id, datos.contenido)
-            )
+            if datos.expira_en is not None:
+                await cursor.execute(
+                    """INSERT INTO mensajes (emisor_id, receptor_id, contenido, expira_en)
+                       VALUES (%s, %s, %s, DATE_ADD(NOW(), INTERVAL %s SECOND))""",
+                    (datos.emisor_id, datos.receptor_id, datos.contenido, datos.expira_en)
+                )
+            else:
+                await cursor.execute(
+                    """INSERT INTO mensajes (emisor_id, receptor_id, contenido)
+                       VALUES (%s, %s, %s)""",
+                    (datos.emisor_id, datos.receptor_id, datos.contenido)
+                )
             mensaje_id = cursor.lastrowid
 
             await cursor.execute(
-                """SELECT id, emisor_id, receptor_id, contenido, timestamp
+                """SELECT id, emisor_id, receptor_id, contenido, timestamp, expira_en
                    FROM mensajes WHERE id = %s""",
                 (mensaje_id,)
             )
@@ -121,7 +128,8 @@ async def enviar_mensaje(
             "emisor_id": mensaje[1],
             "receptor_id": mensaje[2],
             "contenido": mensaje[3],
-            "timestamp": mensaje[4].isoformat()
+            "timestamp": mensaje[4].isoformat(),
+            "expira_en": mensaje[5].isoformat() if mensaje[5] else None
         }
 
     finally:
@@ -171,9 +179,10 @@ async def consultar_conversacion(
             params.append(limit)
 
             await cursor.execute(
-                f"""SELECT id, emisor_id, receptor_id, contenido, timestamp
+                f"""SELECT id, emisor_id, receptor_id, contenido, timestamp, expira_en
                    FROM mensajes
                    WHERE receptor_id = %s
+                     AND (expira_en IS NULL OR expira_en > NOW())
                       {where_cursor}
                    ORDER BY id DESC
                    LIMIT %s""",
@@ -187,7 +196,8 @@ async def consultar_conversacion(
                 "emisor_id": m[1],
                 "receptor_id": m[2],
                 "contenido": m[3],
-                "timestamp": m[4].isoformat()
+                "timestamp": m[4].isoformat(),
+                "expira_en": m[5].isoformat() if m[5] else None
             }
             for m in mensajes
         ]
@@ -317,10 +327,11 @@ async def consultar_conversacion_bilateral(
             params.append(limit)
 
             await cursor.execute(
-                f"""SELECT id, emisor_id, receptor_id, contenido, timestamp
+                f"""SELECT id, emisor_id, receptor_id, contenido, timestamp, expira_en
                    FROM mensajes
                    WHERE ((emisor_id = %s AND receptor_id = %s)
                       OR (emisor_id = %s AND receptor_id = %s))
+                     AND (expira_en IS NULL OR expira_en > NOW())
                       {where_cursor}
                    ORDER BY id DESC
                    LIMIT %s""",
@@ -334,7 +345,8 @@ async def consultar_conversacion_bilateral(
                 "emisor_id": m[1],
                 "receptor_id": m[2],
                 "contenido": m[3],
-                "timestamp": m[4].isoformat()
+                "timestamp": m[4].isoformat(),
+                "expira_en": m[5].isoformat() if m[5] else None
             }
             for m in mensajes
         ]

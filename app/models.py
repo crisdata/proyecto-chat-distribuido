@@ -52,6 +52,18 @@ class MensajeCreate(BaseModel):
     emisor_id: str
     receptor_id: str
     contenido: str
+    expira_en: int | None = None  # segundos para autodestrucción (None = normal)
+
+    @field_validator("expira_en")
+    @classmethod
+    def validar_expira_en(cls, v: int | None) -> int | None:
+        if v is None:
+            return None
+        if v < 5:
+            raise ValueError("La autodestrucción mínima es de 5 segundos.")
+        if v > 300:
+            raise ValueError("La autodestrucción máxima es de 300 segundos (5 min).")
+        return v
 
     @field_validator("contenido")
     @classmethod
@@ -73,6 +85,7 @@ class MensajeResponse(BaseModel):
     receptor_id: str
     contenido: str
     timestamp: datetime
+    expira_en: Optional[datetime] = None
 
 
 # ── Respuestas generales ──────────────────────────────────────────────────────
