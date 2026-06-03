@@ -2,7 +2,7 @@
 # Define la estructura de los datos que entran y salen del sistema.
 # FastAPI usa estos modelos para validar automáticamente cada solicitud.
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from typing import Optional
 
@@ -26,12 +26,11 @@ class UsuarioCreate(BaseModel):
 
 class UsuarioResponse(BaseModel):
     """Datos que el sistema devuelve después de registrar un usuario."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     nombre: str
     creado_en: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
 
 
 class UsuarioAutenticadoResponse(BaseModel):
@@ -67,14 +66,13 @@ class MensajeCreate(BaseModel):
 
 class MensajeResponse(BaseModel):
     """Estructura completa de un mensaje guardado en el sistema."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: Optional[int] = None
     emisor_id: str
     receptor_id: str
     contenido: str
     timestamp: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # ── Respuestas generales ──────────────────────────────────────────────────────
