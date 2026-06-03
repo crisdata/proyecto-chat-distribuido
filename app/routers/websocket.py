@@ -4,8 +4,8 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException
-from typing import Dict
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from typing import Dict, Optional
 
 from app.auth import validar_token
 from app.cache import marcar_presencia, quitar_presencia
@@ -39,7 +39,7 @@ class ConnectionManager:
         self.conexiones[usuario_id] = websocket
         log.info(f"WebSocket aceptado para usuario {usuario_id}")
 
-    async def desconectar(self, usuario_id: str, websocket: WebSocket = None):
+    async def desconectar(self, usuario_id: str, websocket: Optional[WebSocket] = None):
         """Elimina la conexión solo si la que se desconecta es la registrada."""
         actual = self.conexiones.get(usuario_id)
         if actual is None:
@@ -92,19 +92,35 @@ async def refrescar_presencia_periodicamente(usuario_id: str, websocket: WebSock
 async def websocket_endpoint(
     websocket: WebSocket,
     usuario_id: str,
-    token: str = Query(None)
 ):
     """
     Endpoint WebSocket por usuario.
-    Marca presencia en Redis al conectar y la refresca cada 30s.
+    El token no viaja en la URL (evita que quede en logs de Nginx).
+    El cliente debe enviar como primer mensaje:
+        {"tipo": "auth", "token": "<JWT>"}
+    dentro de los primeros 10 segundos o la conexión se cierra.
     """
-    # Validar token
-    if not token:
-        await websocket.close(code=4001, reason="Token faltante")
+    # Aceptar la conexión antes de autenticar para poder cerrarla
+    # con un código de cierre legible por el cliente.
+    await websocket.accept()
+
+    # Esperar primer mensaje de autenticación (timeout 10s)
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+        primer_mensaje = __import__("json").loads(raw)
+    except asyncio.TimeoutError:
+        await websocket.close(code=4001, reason="Timeout de autenticación")
+        return
+    except Exception:
+        await websocket.close(code=4001, reason="Mensaje de autenticación inválido")
+        return
+
+    if primer_mensaje.get("tipo") != "auth" or not primer_mensaje.get("token"):
+        await websocket.close(code=4001, reason="Se esperaba {tipo: auth, token: ...}")
         return
 
     try:
-        payload = await validar_token(token)
+        payload = await validar_token(primer_mensaje["token"])
     except HTTPException:
         await websocket.close(code=4001, reason="Token inválido")
         return
@@ -113,8 +129,15 @@ async def websocket_endpoint(
         await websocket.close(code=4003, reason="Token pertenece a otro usuario")
         return
 
-    # Conectar al manager (acepta el WebSocket)
-    await manager.conectar(usuario_id, websocket)
+    # Registrar en el manager (ya está aceptado, solo registra la referencia)
+    anterior = manager.conexiones.get(usuario_id)
+    if anterior is not None and anterior is not websocket:
+        try:
+            await anterior.close(code=1000, reason="Reemplazada por nueva conexión")
+        except Exception:
+            pass
+    manager.conexiones[usuario_id] = websocket
+    log.info(f"WebSocket autenticado para usuario {usuario_id}")
 
     # Marcar presencia EXPLÍCITAMENTE después de conectar.
     # Llamada separada con manejo de errores propio para que si falla,
